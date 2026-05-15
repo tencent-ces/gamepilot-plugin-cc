@@ -1,6 +1,6 @@
 # How gamepilot-plugin-cc Works
 
-`gamepilot-plugin-cc` is a Claude Code plugin that lets Claude delegate work to the local GamePilot CLI (`gpc`) without leaving the Claude Code session. It exposes slash commands such as `/gamepilot:review`, `/gamepilot:rescue`, `/gamepilot:status`, `/gamepilot:result`, and `/gamepilot:cancel`, then routes those commands through a small Node.js runtime in `plugins/gamepilot/scripts`.
+`gamepilot-plugin-cc` is a Claude Code plugin that lets Claude delegate work to the local GamePilot CLI (`gpc`) without leaving the Claude Code session. It exposes slash commands such as `/gpc:review`, `/gpc:rescue`, `/gpc:status`, `/gpc:result`, and `/gpc:cancel`, then routes those commands through a small Node.js runtime in `plugins/gamepilot/scripts`.
 
 ## High-level flow
 
@@ -73,7 +73,7 @@ The trust-boundary rule is important: only the broker itself may emit trusted br
 
 ## Review commands
 
-`/gamepilot:review` and `/gamepilot:adversarial-review` use git context collection before contacting GamePilot:
+`/gpc:review` and `/gpc:adversarial-review` use git context collection before contacting GamePilot:
 
 1. `lib/git.mjs` determines the review target from `--scope` and `--base`.
 2. It collects working-tree changes, branch diffs, and safe untracked file contents.
@@ -86,7 +86,7 @@ The review output is expected to be structured so Claude can present findings de
 
 ## Rescue and task delegation
 
-`/gamepilot:rescue` delegates arbitrary implementation or investigation work to GamePilot. The command strips routing flags from the natural-language task text, then calls:
+`/gpc:rescue` delegates arbitrary implementation or investigation work to GamePilot. The command strips routing flags from the natural-language task text, then calls:
 
 ```bash
 node scripts/gamepilot-companion.mjs task ... -- <prompt>
@@ -101,7 +101,7 @@ Important task flags:
 - `--background` creates a tracked job and returns immediately.
 - `--resume-last` continues the latest persisted task thread for the workspace when available.
 
-Foreground tasks return rendered output directly. Background tasks persist state so `/gamepilot:status` and `/gamepilot:result` can be used later.
+Foreground tasks return rendered output directly. Background tasks persist state so `/gpc:status` and `/gpc:result` can be used later.
 
 ## Job state and observability
 
@@ -118,11 +118,11 @@ A tracked job stores:
 
 Observability events intentionally avoid storing raw model text. For streaming model output, the event log records counts such as chunk sizes, thought counts, tool calls, file changes, phase transitions, and sanitized diagnostics.
 
-`/gamepilot:status` builds a conservative health snapshot from this data. Health labels include states such as `active`, `quiet`, `possibly_stalled`, `rate_limited`, `auth_required`, `broker_unhealthy`, `worker_missing`, `failed`, `completed`, and `cancelled`.
+`/gpc:status` builds a conservative health snapshot from this data. Health labels include states such as `active`, `quiet`, `possibly_stalled`, `rate_limited`, `auth_required`, `broker_unhealthy`, `worker_missing`, `failed`, `completed`, and `cancelled`.
 
 ## Result and resume behavior
 
-`/gamepilot:result` renders the stored result for a completed or failed job. When a GamePilot session id is available, the result includes a resume command like:
+`/gpc:result` renders the stored result for a completed or failed job. When a GamePilot session id is available, the result includes a resume command like:
 
 ```bash
 gpc --resume <session-id>
@@ -132,7 +132,7 @@ This lets users move work from Claude Code into the standalone GamePilot CLI if 
 
 ## Setup and authentication
 
-`/gamepilot:setup` checks local readiness:
+`/gpc:setup` checks local readiness:
 
 - `getGamePilotAvailability()` verifies that `gpc` exists and reads `gpc --version`.
 - `getGamePilotAuthStatus()` first checks supported environment authentication, then probes ACP authentication methods.

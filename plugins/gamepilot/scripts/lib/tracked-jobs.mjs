@@ -234,7 +234,7 @@ export async function markTrackedJobCancelled(workspaceRoot, jobId, patch = {}) 
     updatedAt: completedAt,
     healthStatus: "cancelled",
     healthMessage: message,
-    recommendedAction: "Check /gamepilot:status or /gamepilot:result, then retry if the result is incomplete."
+    recommendedAction: "Check /gpc:status or /gpc:result, then retry if the result is incomplete."
   };
   return persistJobStateAndEvent(
     workspaceRoot,

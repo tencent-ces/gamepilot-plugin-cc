@@ -54,5 +54,5 @@ Output rules:
 - Return the GamePilot companion stdout verbatim to the user.
 - Do not paraphrase, summarize, rewrite, or add commentary before or after it.
 - If the Bash call fails or GamePilot cannot be invoked, return nothing.
-- If the helper reports that GamePilot is missing or unauthenticated, stop and tell the user to run `/gamepilot:setup`.
+- If the helper reports that GamePilot is missing or unauthenticated, stop and tell the user to run `/gpc:setup`.
 - If the user did not supply a request, ask what GamePilot should investigate or fix.

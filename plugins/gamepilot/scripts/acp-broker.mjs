@@ -204,7 +204,7 @@ function handleAcpLine(line) {
     // Trust boundary: the broker is the sole legitimate emitter of
     // broker/diagnostic. A notification with this method on the child's
     // stdout is a forgery attempt (e.g. a compromised gpc --acp child
-    // trying to phish the user via /gamepilot:status healthMessage). Drop it
+    // trying to phish the user via /gpc:status healthMessage). Drop it
     // instead of forwarding unchanged.
     if (message.method === BROKER_DIAGNOSTIC_METHOD) {
       process.stderr.write(

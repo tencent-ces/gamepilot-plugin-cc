@@ -95,7 +95,7 @@ export function renderStatusSnapshot(snapshot) {
     lines.push("|--------|------|--------|----------|---------|-----------|");
     for (const job of snapshot.recent) {
       const duration = computeElapsedDisplay(job);
-      const followUp = job.status === "completed" ? `/gamepilot:result ${job.id}` : "-";
+      const followUp = job.status === "completed" ? `/gpc:result ${job.id}` : "-";
       lines.push(`| ${job.id} | ${job.kind ?? "-"} | ${job.status} | ${duration} | ${job.summary ?? "-"} | ${followUp} |`);
     }
     lines.push("");
@@ -245,7 +245,7 @@ export function renderSingleJobStatus(snapshotOrJob, options = {}) {
 }
 
 /**
- * Render a stored job result for the /gamepilot:result command.
+ * Render a stored job result for the /gpc:result command.
  *
  * @param {string} cwd
  * @param {any} job - The job index entry.

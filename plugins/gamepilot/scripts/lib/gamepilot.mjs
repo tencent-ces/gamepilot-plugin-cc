@@ -31,7 +31,7 @@ export function buildJobEventFromAcpNotification(notification) {
   if (kind === "agent_message_chunk") {
     const text = update.content?.text ?? "";
     // Privacy: do NOT record the raw model text on the event log. Only record
-    // the chunk size so /gamepilot:status can show liveness ("model is
+    // the chunk size so /gpc:status can show liveness ("model is
     // streaming") without leaking the model's prose through the event log.
     return { type: "model_text_chunk", chars: String(text).length };
   }

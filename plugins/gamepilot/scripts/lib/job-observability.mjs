@@ -181,19 +181,19 @@ export function normalizeAndAppendEvent(job, event) {
   if (normalizedEvent.type === "completed") {
     patch.healthStatus = "completed";
     patch.healthMessage = sanitizeText(normalizedEvent.message) || "Job completed.";
-    patch.recommendedAction = "Run /gamepilot:result to inspect the completed job output.";
+    patch.recommendedAction = "Run /gpc:result to inspect the completed job output.";
   }
 
   if (normalizedEvent.type === "failed") {
     patch.healthStatus = "failed";
     patch.healthMessage = sanitizeText(normalizedEvent.message);
-    patch.recommendedAction = "Check /gamepilot:status or /gamepilot:result for details before retrying.";
+    patch.recommendedAction = "Check /gpc:status or /gpc:result for details before retrying.";
   }
 
   if (normalizedEvent.type === "worker_cancelled" || normalizedEvent.type === "cancelled") {
     patch.healthStatus = "cancelled";
     patch.healthMessage = sanitizeText(normalizedEvent.message);
-    patch.recommendedAction = "Check /gamepilot:status or /gamepilot:result, then retry if the result is incomplete.";
+    patch.recommendedAction = "Check /gpc:status or /gpc:result, then retry if the result is incomplete.";
   }
 
   return patch;
