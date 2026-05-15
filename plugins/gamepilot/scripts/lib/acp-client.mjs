@@ -17,6 +17,7 @@ import { spawn } from "node:child_process";
 import readline from "node:readline";
 import { parseBrokerEndpoint } from "./broker-endpoint.mjs";
 import { ensureBrokerSession, loadBrokerSession } from "./broker-lifecycle.mjs";
+import { buildGamePilotInvocation } from "./gamepilot-command.mjs";
 import { terminateProcessTree } from "./process.mjs";
 import { attachStderrDiagnosticCollector, BROKER_DIAGNOSTIC_METHOD, sanitizeDiagnosticMessage } from "./acp-diagnostics.mjs";
 
@@ -240,17 +241,20 @@ class SpawnedAcpClient extends AcpClientBase {
   }
 
   async initialize() {
-    this.proc = spawn("gpc", ["--acp"], {
+    const env = this.options.env ?? process.env;
+    const invocation = buildGamePilotInvocation(["--acp"], env);
+    this.proc = spawn(invocation.command, invocation.args, {
       cwd: this.cwd,
-      env: this.options.env ?? process.env,
+      env,
       stdio: ["pipe", "pipe", "pipe"]
     });
+    this.displayCommand = invocation.display;
 
     const rl = readline.createInterface({ input: this.proc.stdout });
     rl.on("line", (line) => this.handleLine(line));
 
     this.proc.on("exit", (code) => {
-      this.handleExit(code !== 0 ? new Error(`gpc --acp exited with code ${code}`) : null);
+      this.handleExit(code !== 0 ? new Error(`${this.displayCommand} exited with code ${code}`) : null);
     });
 
     this.proc.on("error", (error) => {
@@ -428,8 +432,8 @@ export class GamePilotAcpClient {
       } catch (error) {
         // If broker is busy, fall through to direct spawn.
         const fallbackMessage = error?.code === BROKER_BUSY_RPC_CODE
-          ? "Broker busy, falling back to direct gpc --acp spawn."
-          : `Broker connection failed (${error?.message ?? error}), falling back to direct spawn.`;
+          ? "Broker busy, falling back to direct GamePilot ACP spawn."
+          : `Broker connection failed (${error?.message ?? error}), falling back to direct GamePilot ACP spawn.`;
         process.stderr.write(`${fallbackMessage}\n`);
         if (typeof options.onDiagnostic === "function") {
           try {

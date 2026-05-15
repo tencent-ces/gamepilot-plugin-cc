@@ -45,16 +45,18 @@ The companion is the boundary between Claude Code prompts and deterministic loca
 
 ### ACP transport
 
-GamePilot is reached through ACP, a JSON-RPC 2.0 protocol over stdio. The plugin starts GamePilot in ACP mode with:
+GamePilot is reached through ACP, a JSON-RPC 2.0 protocol over stdio. By default the plugin starts GamePilot in ACP mode with:
 
 ```bash
 gpc --acp
 ```
 
+For local CLI development, `GAMEPILOT_CLI_COMMAND` can override the base command. For example, `GAMEPILOT_CLI_COMMAND="node /Users/dev/gamepilot-cli/scripts/start.js"` makes the plugin run `node /Users/dev/gamepilot-cli/scripts/start.js --acp`.
+
 The ACP client is implemented in `plugins/gamepilot/scripts/lib/acp-client.mjs`. It has two modes:
 
 1. **Broker mode**: connect to a persistent broker process over a Unix socket or Windows named pipe.
-2. **Direct mode**: spawn `gpc --acp` directly if the broker is unavailable or busy.
+2. **Direct mode**: spawn the resolved GamePilot ACP command directly if the broker is unavailable or busy.
 
 The broker-first strategy avoids paying process startup cost for every command while still allowing a direct fallback.
 

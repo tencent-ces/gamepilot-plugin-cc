@@ -10,6 +10,7 @@ import { readJsonFile } from "./fs.mjs";
 import { BROKER_BUSY_RPC_CODE, BROKER_ENDPOINT_ENV, GamePilotAcpClient } from "./acp-client.mjs";
 import { sanitizeDiagnosticMessage } from "./acp-diagnostics.mjs";
 import { loadBrokerSession } from "./broker-lifecycle.mjs";
+import { buildGamePilotInvocation } from "./gamepilot-command.mjs";
 import { binaryAvailable, runCommand } from "./process.mjs";
 import { collectReviewContext } from "./git.mjs";
 import { loadPrompt } from "./prompts.mjs";
@@ -177,17 +178,18 @@ function escapeXmlContent(content, tagName) {
 // ─── Availability & Auth ──────────────────────────────────────────────────────
 
 /**
- * Check whether the GamePilot CLI binary is available on PATH.
+ * Check whether the GamePilot CLI command is available.
  *
  * @returns {{ available: boolean, version: string | null }}
  */
 export function getGamePilotAvailability() {
-  const available = binaryAvailable("gpc");
+  const invocation = buildGamePilotInvocation(["--version"]);
+  const available = binaryAvailable(invocation.command);
   if (!available) {
     return { available: false, version: null };
   }
 
-  const result = runCommand("gpc", ["--version"]);
+  const result = runCommand(invocation.command, invocation.args);
   const version = result.status === 0 ? result.stdout.trim() : null;
   return { available: true, version };
 }

@@ -26,6 +26,7 @@ import {
   sanitizeDiagnosticMessage
 } from "./lib/acp-diagnostics.mjs";
 import { parseBrokerEndpoint } from "./lib/broker-endpoint.mjs";
+import { buildGamePilotInvocation } from "./lib/gamepilot-command.mjs";
 import { listenOnRestrictedUnixSocket } from "./lib/socket-permissions.mjs";
 import { spawn } from "node:child_process";
 import readline from "node:readline";
@@ -73,6 +74,7 @@ function drainDiagnosticRingTo(socket) {
 
 let acpProcess = null;
 let acpReady = false;
+let acpDisplayCommand = "gpc --acp";
 let nextRpcId = 1;
 
 /** @type {Map<number, { clientSocket: net.Socket, clientId: number }>} */
@@ -82,7 +84,9 @@ const pendingRequests = new Map();
 let activeClient = null;
 
 function spawnAcpProcess(cwd) {
-  const child = spawn("gpc", ["--acp"], {
+  const invocation = buildGamePilotInvocation(["--acp"], process.env);
+  acpDisplayCommand = invocation.display;
+  const child = spawn(invocation.command, invocation.args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env
@@ -93,13 +97,13 @@ function spawnAcpProcess(cwd) {
 
   if (child.stderr) {
     attachStderrDiagnosticCollector(child.stderr, (message) => {
-      process.stderr.write(`[gpc --acp stderr] ${message}\n`);
+      process.stderr.write(`[${invocation.display} stderr] ${message}\n`);
       forwardDiagnosticToActiveClient("broker-child-stderr", message);
     });
   }
 
   child.on("exit", (code) => {
-    const exitMessage = `gpc --acp exited with code ${code}`;
+    const exitMessage = `${invocation.display} exited with code ${code}`;
     process.stderr.write(`${exitMessage}\n`);
     forwardDiagnosticToActiveClient("broker-child-exit", exitMessage);
     acpProcess = null;
@@ -118,7 +122,7 @@ function spawnAcpProcess(cwd) {
   });
 
   child.on("error", (error) => {
-    const errorMessage = `gpc --acp error: ${error.message}`;
+    const errorMessage = `${invocation.display} error: ${error.message}`;
     process.stderr.write(`${errorMessage}\n`);
     forwardDiagnosticToActiveClient("broker-child-error", errorMessage);
     acpProcess = null;
@@ -176,7 +180,7 @@ function handleAcpLine(line) {
       if (pending.clientSocket === null) {
         // Initialize response — mark as ready.
         acpReady = true;
-        process.stderr.write("ACP broker: gpc --acp initialized.\n");
+        process.stderr.write(`ACP broker: ${acpDisplayCommand} initialized.\n`);
         return;
       }
 
