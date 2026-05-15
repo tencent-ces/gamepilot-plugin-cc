@@ -73,16 +73,18 @@ The trust-boundary rule is important: only the broker itself may emit trusted br
 
 ## Review commands
 
-`/gpc:review` and `/gpc:adversarial-review` use git context collection before contacting GamePilot:
+`/gpc:review` delegates regular reviews to GamePilot CLI's native ACP `/review` slash command. The plugin maps its compatibility flags (`--scope`, `--base`, foreground/background controls, model, thinking, and streaming options) to an explicit `/review ...` target, then sends that command through `session/prompt` with read-only approval mode. Native GamePilot owns review target resolution, skill activation, worker selection, and final review behavior.
+
+`/gpc:adversarial-review` remains a plugin-defined steerable review path:
 
 1. `lib/git.mjs` determines the review target from `--scope` and `--base`.
 2. It collects working-tree changes, branch diffs, and safe untracked file contents.
-3. `lib/prompts.mjs` loads the relevant prompt template from `plugins/gamepilot/prompts`.
-4. `lib/gamepilot.mjs` calls `runAcpReview` or `runAcpAdversarialReview`.
+3. `lib/prompts.mjs` loads the adversarial review prompt template from `plugins/gamepilot/prompts`.
+4. `lib/gamepilot.mjs` calls `runAcpAdversarialReview`.
 5. The ACP client opens a GamePilot session, sets approval mode, optionally sets a Studio-configured model id, and sends the prompt.
 6. The response is parsed against `schemas/review-output.schema.json` and rendered for Claude Code.
 
-The review output is expected to be structured so Claude can present findings deterministically instead of relying on free-form prose.
+Adversarial review output is expected to be structured so Claude can present findings deterministically instead of relying on free-form prose.
 
 ## Rescue and task delegation
 

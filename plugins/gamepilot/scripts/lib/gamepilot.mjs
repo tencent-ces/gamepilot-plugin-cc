@@ -337,6 +337,7 @@ export const __testing = {
   simulateNotificationDispatch(notifications, onStream, options) {
     return dispatchNotifications(notifications, onStream, options);
   },
+  buildReviewSlashCommand,
   emitThinkingWarningIfNew,
   resetThinkingWarning
 };
@@ -482,31 +483,16 @@ export async function runAcpPrompt(cwd, prompt, options = {}) {
 }
 
 /**
- * Run a code review via ACP. Collects git context and sends a review prompt.
+ * Run a code review via GamePilot CLI's native ACP /review command.
  *
  * @param {string} cwd
  * @param {{ scope?: string, base?: string, model?: string, thinking?: "off"|"low"|"medium"|"high", env?: NodeJS.ProcessEnv, onNotification?: (n: any) => void, onStream?: (event: any) => void, streamThoughtText?: boolean }} [options]
  * @returns {Promise<{ text: string, sessionId: string | null, scope: string, summary: string, error: unknown }>}
  */
 export async function runAcpReview(cwd, options = {}) {
-  const { scope, context } = collectReviewContext(cwd, {
-    scope: options.scope,
-    base: options.base
-  });
+  const { command, scope, summary } = buildReviewSlashCommand(options);
 
-  if (!context.diff && scope === "working-tree" && context.untrackedContents?.length === 0) {
-    return {
-      text: "No changes detected in the working tree. Nothing to review.",
-      sessionId: null,
-      scope,
-      summary: "No changes",
-      error: null
-    };
-  }
-
-  const reviewPrompt = buildReviewPrompt(scope, context);
-
-  const result = await runAcpPrompt(cwd, reviewPrompt, {
+  const result = await runAcpPrompt(cwd, command, {
     model: options.model,
     thinking: options.thinking,
     onStream: options.onStream,
@@ -522,7 +508,7 @@ export async function runAcpReview(cwd, options = {}) {
     text: result.text,
     sessionId: result.sessionId,
     scope,
-    summary: context.summary,
+    summary,
     error: result.error
   };
 }
@@ -705,65 +691,46 @@ export function readOutputSchema(schemaPath) {
 }
 
 /**
- * Build a review prompt from collected git context.
+ * Build the native GamePilot CLI /review command sent through ACP.
  *
- * @param {string} scope
- * @param {any} context
- * @returns {string}
+ * @param {{ scope?: string, base?: string }} [options]
+ * @returns {{ command: string, scope: string, summary: string }}
  */
-function buildReviewPrompt(scope, context) {
-  const lines = [];
-  lines.push("<role>");
-  lines.push("You are GamePilot performing a code review.");
-  lines.push("Review the provided changes for correctness, security, performance, and maintainability.");
-  lines.push("</role>");
-  lines.push("");
-  lines.push("<task>");
-  lines.push(`Review the following ${scope === "branch" ? "branch" : "working tree"} changes.`);
-  lines.push("Focus on material issues: bugs, security vulnerabilities, data loss risks, and correctness problems.");
-  lines.push("Do not comment on style, naming, or formatting unless it creates a functional issue.");
-  lines.push("</task>");
-  lines.push("");
-
-  if (context.summary) {
-    lines.push("<context>");
-    lines.push(context.summary);
-    lines.push("</context>");
-    lines.push("");
+function buildReviewSlashCommand(options = {}) {
+  const scope = options.scope ?? "auto";
+  if (!new Set(["auto", "working-tree", "branch"]).has(scope)) {
+    throw new Error(`Invalid scope "${scope}". Must be one of: auto, working-tree, branch`);
   }
 
-  if (context.diff) {
-    lines.push("<diff>");
-    lines.push(escapeXmlContent(context.diff, "diff"));
-    lines.push("</diff>");
-    lines.push("");
+  if (options.base) {
+    return {
+      command: `/review changes against ${options.base}`,
+      scope: "branch",
+      summary: `Native GamePilot /review against ${options.base}`
+    };
   }
 
-  if (context.commits) {
-    lines.push("<commits>");
-    lines.push(escapeXmlContent(context.commits, "commits"));
-    lines.push("</commits>");
-    lines.push("");
+  if (scope === "branch") {
+    return {
+      command: "/review branch changes",
+      scope,
+      summary: "Native GamePilot /review for branch changes"
+    };
   }
 
-  if (context.untrackedContents?.length > 0) {
-    for (const file of context.untrackedContents) {
-      if (file.content) {
-        lines.push(`<untracked_file path="${file.path}">`);
-        lines.push(escapeXmlContent(file.content, "untracked_file"));
-        lines.push("</untracked_file>");
-        lines.push("");
-      }
-    }
+  if (scope === "working-tree") {
+    return {
+      command: "/review current SCM changes",
+      scope,
+      summary: "Native GamePilot /review for current SCM changes"
+    };
   }
 
-  lines.push("<grounding_rules>");
-  lines.push("Every finding must be grounded in the provided diff or file contents.");
-  lines.push("Do not speculate about code you cannot see.");
-  lines.push("If a finding depends on an inference, state that explicitly.");
-  lines.push("</grounding_rules>");
-
-  return lines.join("\n");
+  return {
+    command: "/review current SCM changes",
+    scope,
+    summary: "Native GamePilot /review for current SCM changes"
+  };
 }
 
 /**

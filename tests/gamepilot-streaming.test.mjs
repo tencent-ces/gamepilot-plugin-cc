@@ -87,6 +87,36 @@ test("runAcpReview forwards thinking and onStream to runAcpPrompt", () => {
   assert.match(body, /onStream:\s*options\.onStream/);
 });
 
+test("runAcpReview delegates to native GamePilot /review with explicit targets", () => {
+  assert.deepEqual(gamepilot.buildReviewSlashCommand(), {
+    command: "/review current SCM changes",
+    scope: "auto",
+    summary: "Native GamePilot /review for current SCM changes"
+  });
+  assert.deepEqual(gamepilot.buildReviewSlashCommand({ scope: "working-tree" }), {
+    command: "/review current SCM changes",
+    scope: "working-tree",
+    summary: "Native GamePilot /review for current SCM changes"
+  });
+  assert.deepEqual(gamepilot.buildReviewSlashCommand({ scope: "branch" }), {
+    command: "/review branch changes",
+    scope: "branch",
+    summary: "Native GamePilot /review for branch changes"
+  });
+  assert.deepEqual(gamepilot.buildReviewSlashCommand({ scope: "working-tree", base: "main" }), {
+    command: "/review changes against main",
+    scope: "branch",
+    summary: "Native GamePilot /review against main"
+  });
+});
+
+test("runAcpReview rejects invalid review scopes before invoking GamePilot", () => {
+  assert.throws(
+    () => gamepilot.buildReviewSlashCommand({ scope: "brach" }),
+    /Invalid scope "brach"\. Must be one of: auto, working-tree, branch/
+  );
+});
+
 test("runAcpAdversarialReview forwards thinking and onStream to runAcpPrompt", () => {
   const body = functionSource("runAcpAdversarialReview");
   assert.match(body, /thinking:\s*options\.thinking/);

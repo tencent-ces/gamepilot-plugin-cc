@@ -57,7 +57,7 @@ If GamePilot CLI is installed but not authenticated, run `!gpc` in Claude Code t
 
 ### `/gpc:review`
 
-Runs a GamePilot review on your current work.
+Runs a GamePilot review on your current work by delegating to GamePilot CLI's native `/review` command through ACP.
 
 > **Note:** Code review especially for multi-file changes might take a while. It's generally recommended to run it in the background.
 
