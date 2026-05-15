@@ -142,16 +142,18 @@ test("hooks keep session-end cleanup and stop gating enabled", () => {
   assert.match(source, /session-lifecycle-hook\.mjs/);
 });
 
-test("setup command can offer GamePilot install and still points users to gpc auth", () => {
+test("setup command points users to GamePilot download and still points users to gpc auth", () => {
   const setup = read("commands/setup.md");
   const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
 
   assert.match(setup, /argument-hint:\s*'\[--enable-review-gate\|--disable-review-gate\]'/);
-  assert.match(setup, /AskUserQuestion/);
-  assert.match(setup, /npm install -g @google\/gamepilot-cli/);
+  assert.doesNotMatch(setup, /AskUserQuestion/);
+  assert.doesNotMatch(setup, /npm install -g @google\/gamepilot-cli/);
+  assert.match(setup, /https:\/\/ai\.levelinfinite\.com\/dev/);
   assert.match(setup, /gamepilot-companion\.mjs" setup --json "\$ARGUMENTS"/);
+  assert.match(setup, /GAMEPILOT_API_KEY/);
   assert.match(readme, /!gpc/);
-  assert.match(readme, /offer to install.*for you/i);
+  assert.match(readme, /download and install.*https:\/\/ai\.levelinfinite\.com\/dev/i);
   assert.match(readme, /\/gpc:setup --enable-review-gate/);
   assert.match(readme, /\/gpc:setup --disable-review-gate/);
 });
