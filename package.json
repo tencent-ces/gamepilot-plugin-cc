@@ -1,0 +1,21 @@
+{
+  "name": "gamepilot-plugin-cc",
+  "version": "1.0.1",
+  "description": "Claude Code plugin for GamePilot CLI delegation and code review.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "gamepilot",
+    "gamepilot-cli",
+    "code-review",
+    "ai-delegation"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "name": "gamepilot",
+  "owner": {
+    "name": "GamePilot"
+  },
+  "metadata": {
+    "description": "GamePilot plugins to use in Claude Code for delegation and code review.",
+    "version": "1.0.1"
+  },
+  "plugins": [
+    {
+      "name": "gamepilot-plugin-cc",
+      "description": "Use GamePilot from Claude Code to review code or delegate tasks.",
+      "version": "1.0.1",
+      "author": {
+        "name": "GamePilot"
+      },
+      "source": "./plugins/gamepilot"
+    }
+  ]
+}

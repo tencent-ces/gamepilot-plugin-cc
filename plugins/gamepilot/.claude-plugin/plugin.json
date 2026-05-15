@@ -1,0 +1,8 @@
+{
+  "name": "gpc",
+  "version": "1.0.1",
+  "description": "Use GamePilot from Claude Code to review code or delegate tasks.",
+  "author": {
+    "name": "GamePilot"
+  }
+}
