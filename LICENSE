@@ -1,6 +1,5 @@
 MIT License
 
-Copyright (c) 2026 Sakib Sadman Shajib
 Copyright (c) 2026 GamePilot
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,3 +19,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Portions of this software are derived from codex-plugin-cc
+(https://github.com/openai/codex-plugin-cc), Copyright 2026 OpenAI,
+licensed under the Apache License, Version 2.0. You may obtain a copy
+of that license at http://www.apache.org/licenses/LICENSE-2.0 or in
+the LICENSE-APACHE file included with this distribution.
+
+Portions of this software are derived from gemini-plugin-cc
+(https://github.com/sakibsadmanshajib/gemini-plugin-cc), Copyright
+2026 Sakib Sadman Shajib, licensed under the MIT License.
+
+See the NOTICE file for additional attribution.

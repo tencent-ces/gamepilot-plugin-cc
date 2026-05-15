@@ -414,4 +414,8 @@ Yes. The plugin inherits your `~/.gamepilot/settings.json` and any project-level
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) for GamePilot contributions. This project is derived from
+[codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (OpenAI,
+[Apache-2.0](LICENSE-APACHE)) via
+[gemini-plugin-cc](https://github.com/sakibsadmanshajib/gemini-plugin-cc)
+(Sakib Sadman Shajib, MIT). See [NOTICE](NOTICE) for full attribution.
