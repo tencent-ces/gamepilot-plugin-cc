@@ -49,7 +49,7 @@ claude plugin install gamepilot-plugin-cc@gamepilot
 /gpc:setup
 ```
 
-If GamePilot CLI is not installed, the plugin will offer to install it for you (`npm install -g @google/gamepilot-cli`).
+If GamePilot CLI is not installed, download and install it from https://ai.levelinfinite.com/dev.
 
 If GamePilot CLI is installed but not authenticated, run `!gpc` in Claude Code to authenticate interactively, or set `GAMEPILOT_API_KEY` in your environment.
 
