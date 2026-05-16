@@ -92,41 +92,29 @@ function functionSource(name) {
   assert.fail(`could not extract ${name}`);
 }
 
-test("runAcpReview forwards thinking, stream, and default approval mode to runAcpPrompt", () => {
+test("runAcpReview forwards stream and default approval mode to runAcpPrompt", () => {
   const body = functionSource("runAcpReview");
-  assert.match(body, /thinking:\s*options\.thinking/);
+  assert.doesNotMatch(body, /thinking:\s*options\.thinking/);
   assert.match(body, /onStream:\s*options\.onStream/);
   assert.match(body, /approvalMode:\s*"default"/);
 });
 
-test("runAcpReview delegates to native GamePilot /review with explicit targets", () => {
+test("runAcpReview delegates to native GamePilot /review with pass-through targets", () => {
+  assert.deepEqual(gamepilot.buildReviewSlashCommand({ target: "packages/cli/src/acp/commandPolicy.ts" }), {
+    command: "/review packages/cli/src/acp/commandPolicy.ts",
+    scope: "target",
+    summary: "Native GamePilot /review for packages/cli/src/acp/commandPolicy.ts"
+  });
+  assert.deepEqual(gamepilot.buildReviewSlashCommand({ target: "  --base main --scope general  " }), {
+    command: "/review --base main --scope general",
+    scope: "target",
+    summary: "Native GamePilot /review for --base main --scope general"
+  });
   assert.deepEqual(gamepilot.buildReviewSlashCommand(), {
     command: "/review current SCM changes",
     scope: "auto",
     summary: "Native GamePilot /review for current SCM changes"
   });
-  assert.deepEqual(gamepilot.buildReviewSlashCommand({ scope: "working-tree" }), {
-    command: "/review current SCM changes",
-    scope: "working-tree",
-    summary: "Native GamePilot /review for current SCM changes"
-  });
-  assert.deepEqual(gamepilot.buildReviewSlashCommand({ scope: "branch" }), {
-    command: "/review branch changes",
-    scope: "branch",
-    summary: "Native GamePilot /review for branch changes"
-  });
-  assert.deepEqual(gamepilot.buildReviewSlashCommand({ scope: "working-tree", base: "main" }), {
-    command: "/review changes against main",
-    scope: "branch",
-    summary: "Native GamePilot /review against main"
-  });
-});
-
-test("runAcpReview rejects invalid review scopes before invoking GamePilot", () => {
-  assert.throws(
-    () => gamepilot.buildReviewSlashCommand({ scope: "brach" }),
-    /Invalid scope "brach"\. Must be one of: auto, working-tree, branch/
-  );
 });
 
 test("runAcpAdversarialReview forwards thinking and onStream to runAcpPrompt", () => {

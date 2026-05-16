@@ -21,7 +21,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { parseCommandInput } from "./lib/args.mjs";
+import { parseCommandInput, splitRawArgumentString } from "./lib/args.mjs";
 import {
   buildPersistentTaskThreadName,
   DEFAULT_CONTINUE_PROMPT,
@@ -74,7 +74,7 @@ function printUsage() {
     [
       "Usage:",
       "  node scripts/gamepilot-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
-      "  node scripts/gamepilot-companion.mjs review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--thinking <off|low|medium|high>] [--stream-output]",
+      "  node scripts/gamepilot-companion.mjs review [native-/review-target-or-flags] [--background]",
       "  node scripts/gamepilot-companion.mjs adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--model <model-id>] [--thinking <off|low|medium|high>] [--stream-output] [focus text...]",
       "  node scripts/gamepilot-companion.mjs task [--write] [--model <model-id>] [--thinking <off|low|medium|high>] [--approval-mode <mode>] [--stream-output] [--background|--wait] [--resume-last] [--json] -- <prompt>",
       "  node scripts/gamepilot-companion.mjs task-worker <job-id>",
@@ -159,30 +159,32 @@ async function handleSetup(argv) {
 
 // ─── Review ───────────────────────────────────────────────────────────────────
 
+function parseReviewPassthroughArgs(argv) {
+  const tokens = argv.length === 1 && typeof argv[0] === "string"
+    ? splitRawArgumentString(argv[0])
+    : [...argv];
+  const targetTokens = [];
+  let background = false;
+  for (const token of tokens) {
+    if (token === "--background") {
+      background = true;
+    } else {
+      targetTokens.push(token);
+    }
+  }
+  return { background, target: targetTokens.join(" ").trim() };
+}
+
 async function handleReview(argv) {
-  const { options } = parseCommandInput(argv, {
-    valueOptions: ["base", "scope", "model", "cwd", "thinking"],
-    booleanOptions: ["json", "wait", "background", "stream-output"]
-  });
-
-  const thinking = resolveThinkingOption(options);
-  const streamHandler = createStderrStreamHandler(options);
-
-  const cwd = resolveCommandCwd(options);
+  const { background, target } = parseReviewPassthroughArgs(argv);
+  const cwd = process.cwd();
   const workspaceRoot = resolveWorkspaceRoot(cwd);
 
-  if (options.background) {
-    return runReviewInBackground(workspaceRoot, { ...options, thinking }, "review");
+  if (background) {
+    return runReviewInBackground(workspaceRoot, { target }, "review");
   }
 
-  const result = await runAcpReview(cwd, {
-    scope: options.scope,
-    base: options.base,
-    model: options.model,
-    thinking,
-    onStream: streamHandler,
-    streamThoughtText: Boolean(options["stream-output"])
-  });
+  const result = await runAcpReview(cwd, { target });
 
   if (result.error) {
     process.stderr.write(`Review failed: ${result.error?.message ?? result.error}\n`);
@@ -196,7 +198,7 @@ async function handleReview(argv) {
     sessionId: result.sessionId
   };
 
-  outputCommandResult(payload, result.text, options.json);
+  outputCommandResult(payload, result.text, false);
 }
 
 // ─── Adversarial Review ───────────────────────────────────────────────────────
@@ -386,10 +388,7 @@ async function handleTaskWorker(argv) {
       let result;
       if (jobKind === "review") {
         result = await runAcpReview(cwd, {
-          scope: request.scope,
-          base: request.base,
-          model: request.model,
-          thinking: request.thinking,
+          target: request.target,
           jobObserver
         });
       } else if (jobKind === "adversarial-review") {
@@ -585,11 +584,13 @@ async function handleTaskResumeCandidate(argv) {
 // ─── Background Helpers ───────────────────────────────────────────────────────
 
 async function runReviewInBackground(workspaceRoot, options, kind) {
+  const titleTarget = options.target || options.scope || "auto";
   const job = await createTrackedJob({
     workspaceRoot,
     kind,
-    title: `${kind}: ${options.scope ?? "auto"} review`,
+    title: `${kind}: ${titleTarget} review`,
     request: {
+      target: options.target,
       scope: options.scope,
       base: options.base,
       model: options.model,

@@ -1,6 +1,6 @@
 ---
-description: Run a GamePilot code review of working-tree or branch changes in this repository
-argument-hint: '[--base <ref>] [--scope <auto|working-tree|branch>] [--wait|--background] [--model <model-id>] [--thinking <off|low|medium|high>] [--stream-output] [--json]'
+description: Run a GamePilot code review of a target, working-tree, or branch changes in this repository
+argument-hint: '[native-/review-target-or-flags] [--background]'
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash(node:*), Bash(git:*), AskUserQuestion
 ---
@@ -11,10 +11,11 @@ Run:
 
 Behavior:
 - Delegates regular reviews to GamePilot CLI's native ACP `/review` command so review targeting and worker behavior stay aligned with `gpc`.
+- Forwards native `/review` target text and flags (for example file paths, `staged`, `--scope general`, or natural-language scopes) directly to GamePilot CLI.
 
 Flags:
-- `--thinking <off|low|medium|high>` selects a requested reasoning level (default: medium). The local GamePilot CLI does not expose a per-invocation thinking override yet; the companion parses and validates the flag, emits a one-shot warning, and falls back to the CLI's default reasoning. Configure `thinkingConfig` in GamePilot `settings.json` for a persistent setting that takes effect today.
-- `--stream-output` streams raw model and thought chunks to stderr during the review. Without it, progress is shown as compact markers.
+- `--background` is consumed by the plugin to run the review as a tracked background job.
+- All other flags are passed through as native GamePilot `/review` text.
 
 Output rules:
 - Present the review output to the user exactly as returned.

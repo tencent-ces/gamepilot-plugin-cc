@@ -19,8 +19,10 @@ test("review command is a deterministic direct-execution entrypoint", () => {
   assert.match(source, /gamepilot-companion\.mjs" review "\$ARGUMENTS"/);
   assert.match(source, /Do not paraphrase, summarize, or add your own commentary/i);
   assert.match(source, /Do not make any code changes/i);
-  assert.match(source, /\[--base <ref>\]/);
-  assert.match(source, /\[--scope <auto\|working-tree\|branch>\]/);
+  assert.match(source, /native-\/review-target-or-flags/);
+  assert.match(source, /--background/);
+  assert.doesNotMatch(source, /\[--base <ref>\]/);
+  assert.doesNotMatch(source, /\[--scope <auto\|working-tree\|branch>\]/);
 });
 
 test("adversarial review command is a deterministic direct-execution entrypoint", () => {
@@ -161,7 +163,7 @@ test("setup command points users to GamePilot download and still points users to
 test("companion command handlers use raw command argument parsing", () => {
   const source = fs.readFileSync(COMPANION_SCRIPT, "utf8");
 
-  assert.match(source, /import \{ parseCommandInput \} from "\.\/lib\/args\.mjs"/);
+  assert.match(source, /import \{ parseCommandInput, splitRawArgumentString \} from "\.\/lib\/args\.mjs"/);
   assert.doesNotMatch(source, /\bparseArgs\(/);
 });
 
