@@ -503,15 +503,13 @@ export async function runAcpPrompt(cwd, prompt, options = {}) {
  * Run a code review via GamePilot CLI's native ACP /review command.
  *
  * @param {string} cwd
- * @param {{ scope?: string, base?: string, model?: string, thinking?: "off"|"low"|"medium"|"high", env?: NodeJS.ProcessEnv, onNotification?: (n: any) => void, onStream?: (event: any) => void, streamThoughtText?: boolean }} [options]
+ * @param {{ target?: string, env?: NodeJS.ProcessEnv, onNotification?: (n: any) => void, onStream?: (event: any) => void, streamThoughtText?: boolean }} [options]
  * @returns {Promise<{ text: string, sessionId: string | null, scope: string, summary: string, error: unknown }>}
  */
 export async function runAcpReview(cwd, options = {}) {
   const { command, scope, summary } = buildReviewSlashCommand(options);
 
   const result = await runAcpPrompt(cwd, command, {
-    model: options.model,
-    thinking: options.thinking,
     onStream: options.onStream,
     streamThoughtText: options.streamThoughtText,
     approvalMode: "default", // Native /review needs read-only SCM inspection via GamePilot CLI.
@@ -710,42 +708,22 @@ export function readOutputSchema(schemaPath) {
 /**
  * Build the native GamePilot CLI /review command sent through ACP.
  *
- * @param {{ scope?: string, base?: string }} [options]
+ * @param {{ target?: string }} [options]
  * @returns {{ command: string, scope: string, summary: string }}
  */
 function buildReviewSlashCommand(options = {}) {
-  const scope = options.scope ?? "auto";
-  if (!new Set(["auto", "working-tree", "branch"]).has(scope)) {
-    throw new Error(`Invalid scope "${scope}". Must be one of: auto, working-tree, branch`);
-  }
-
-  if (options.base) {
+  const target = String(options.target ?? "").trim();
+  if (target) {
     return {
-      command: `/review changes against ${options.base}`,
-      scope: "branch",
-      summary: `Native GamePilot /review against ${options.base}`
-    };
-  }
-
-  if (scope === "branch") {
-    return {
-      command: "/review branch changes",
-      scope,
-      summary: "Native GamePilot /review for branch changes"
-    };
-  }
-
-  if (scope === "working-tree") {
-    return {
-      command: "/review current SCM changes",
-      scope,
-      summary: "Native GamePilot /review for current SCM changes"
+      command: `/review ${target}`,
+      scope: "target",
+      summary: `Native GamePilot /review for ${target}`
     };
   }
 
   return {
     command: "/review current SCM changes",
-    scope,
+    scope: "auto",
     summary: "Native GamePilot /review for current SCM changes"
   };
 }

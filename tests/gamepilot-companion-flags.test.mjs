@@ -60,12 +60,17 @@ test("handleTask validates --thinking against the THINKING_LEVELS set", () => {
   assert.match(COMPANION_SRC, /THINKING_LEVELS/);
 });
 
-test("handleReview and handleReviewCommand also parse --thinking and --stream-output", () => {
-  for (const name of ["handleReview", "handleReviewCommand"]) {
-    const body = functionSource(name);
-    assert.match(body, /valueOptions:\s*\[[^\]]*"thinking"/);
-    assert.match(body, /booleanOptions:\s*\[[^\]]*"stream-output"/);
-  }
+test("handleReviewCommand parses --thinking and --stream-output for adversarial review", () => {
+  const body = functionSource("handleReviewCommand");
+  assert.match(body, /valueOptions:\s*\[[^\]]*"thinking"/);
+  assert.match(body, /booleanOptions:\s*\[[^\]]*"stream-output"/);
+});
+
+test("handleReview only consumes --background and forwards native review text", () => {
+  const body = functionSource("handleReview");
+  assert.match(body, /parseReviewPassthroughArgs\(argv\)/);
+  assert.doesNotMatch(body, /parseCommandInput\(argv/);
+  assert.match(body, /runAcpReview\(cwd, \{ target \}\)/);
 });
 
 test("foreground task done stats use returned chunk counters and only emit after errors are checked", () => {

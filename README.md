@@ -57,22 +57,23 @@ If GamePilot CLI is installed but not authenticated, run `!gpc` in Claude Code t
 
 ### `/gpc:review`
 
-Runs a GamePilot review on your current work by delegating to GamePilot CLI's native `/review` command through ACP.
+Runs a GamePilot review on your current work or an explicit target by delegating to GamePilot CLI's native `/review` command through ACP.
 
 > **Note:** Code review especially for multi-file changes might take a while. It's generally recommended to run it in the background.
 
 Use it when you want:
 
 - a review of your current uncommitted changes
-- a review of your branch compared to a base branch like `main`
+- a review of an explicit file, SCM target, or native GamePilot `/review` scope
 
-Use `--base <ref>` for branch review. It also supports `--wait` and `--background`. It is not steerable and does not take custom focus text. Use [`/gpc:adversarial-review`](#gpcadversarial-review) when you want to challenge a specific decision or risk area.
+The plugin consumes only `--background`; all other arguments are forwarded as native GamePilot `/review` text. It is not steerable and does not take custom focus text. Use [`/gpc:adversarial-review`](#gpcadversarial-review) when you want to challenge a specific decision or risk area.
 
 Examples:
 
 ```bash
 /gpc:review
-/gpc:review --base main
+/gpc:review packages/cli/src/acp/commandPolicy.ts
+/gpc:review staged --scope general
 /gpc:review --background
 ```
 

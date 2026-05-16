@@ -75,7 +75,7 @@ The trust-boundary rule is important: only the broker itself may emit trusted br
 
 ## Review commands
 
-`/gpc:review` delegates regular reviews to GamePilot CLI's native ACP `/review` slash command. The plugin maps its compatibility flags (`--scope`, `--base`, foreground/background controls, model, thinking, and streaming options) to an explicit `/review ...` target, then sends that command through `session/prompt` with read-only approval mode. Native GamePilot owns review target resolution, skill activation, worker selection, and final review behavior.
+`/gpc:review` delegates regular reviews to GamePilot CLI's native ACP `/review` slash command. The plugin consumes only its `--background` routing flag; all other arguments are forwarded as native `/review` target text. When no target is provided, it sends `/review current SCM changes` through `session/prompt` with read-only approval mode. Native GamePilot owns review target parsing, scope flags, skill activation, worker selection, and final review behavior.
 
 `/gpc:adversarial-review` remains a plugin-defined steerable review path:
 

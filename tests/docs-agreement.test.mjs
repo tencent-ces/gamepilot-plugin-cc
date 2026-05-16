@@ -33,9 +33,11 @@ test("rescue.md no longer advertises the broken --thinking-budget <number> form"
   assert.doesNotMatch(RESCUE, /--thinking-budget\s*<number>/);
 });
 
-test("review.md advertises --thinking and --stream-output", () => {
-  assert.match(REVIEW, /--thinking <off\|low\|medium\|high>/);
-  assert.match(REVIEW, /--stream-output/);
+test("review.md documents native pass-through and only plugin-owned --background", () => {
+  assert.match(REVIEW, /native GamePilot `\/review` text/i);
+  assert.match(REVIEW, /--background/);
+  assert.doesNotMatch(REVIEW, /--thinking <off\|low\|medium\|high>/);
+  assert.doesNotMatch(REVIEW, /--stream-output/);
 });
 
 test("review.md no longer advertises the broken --thinking-budget <number> form", () => {
@@ -52,7 +54,6 @@ test("docs explain --thinking is parsed but not delivered per invocation yet", (
   for (const [name, source] of [
     ["README.md", README],
     ["commands/rescue.md", RESCUE],
-    ["commands/review.md", REVIEW],
     ["agents/gamepilot-rescue.md", RESCUE_AGENT]
   ]) {
     assert.match(source, /per-invocation thinking override/i, `${name} should mention the runtime limitation`);
