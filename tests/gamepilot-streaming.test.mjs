@@ -63,6 +63,17 @@ test("simulateNotificationDispatch fires tool_call and file_change as stream eve
   assert.equal(events[1].action, "write");
 });
 
+test("simulateNotificationDispatch extracts tool names from ACP tool_call variants", () => {
+  const { events, toolCalls } = gamepilot.simulateNotificationDispatch([
+    { method: "session/update", params: { sessionId: "s", update: { sessionUpdate: "tool_call", title: "run_shell_command" } } },
+    { method: "session/update", params: { sessionId: "s", update: { sessionUpdate: "tool_call", toolCall: { name: "invoke_agent" } } } },
+    { method: "session/update", params: { sessionId: "s", update: { sessionUpdate: "tool_call", content: { toolCall: { name: "read_file" } } } } }
+  ]);
+
+  assert.deepEqual(events.map((e) => e.toolName), ["run_shell_command", "invoke_agent", "read_file"]);
+  assert.deepEqual(toolCalls.map((t) => t.name), ["run_shell_command", "invoke_agent", "read_file"]);
+});
+
 function functionSource(name) {
   const start = GAMEPILOT_SOURCE.indexOf(`export async function ${name}`);
   assert.notEqual(start, -1, `missing ${name}`);
@@ -81,10 +92,11 @@ function functionSource(name) {
   assert.fail(`could not extract ${name}`);
 }
 
-test("runAcpReview forwards thinking and onStream to runAcpPrompt", () => {
+test("runAcpReview forwards thinking, stream, and default approval mode to runAcpPrompt", () => {
   const body = functionSource("runAcpReview");
   assert.match(body, /thinking:\s*options\.thinking/);
   assert.match(body, /onStream:\s*options\.onStream/);
+  assert.match(body, /approvalMode:\s*"default"/);
 });
 
 test("runAcpReview delegates to native GamePilot /review with explicit targets", () => {

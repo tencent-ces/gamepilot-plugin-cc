@@ -45,6 +45,19 @@ test("buildJobEventFromAcpNotification maps tool_call to tool_call with toolName
   assert.equal(event.toolName, "read_file");
 });
 
+test("buildJobEventFromAcpNotification extracts tool names from ACP tool_call variants", () => {
+  const updates = [
+    { sessionUpdate: "tool_call", title: "run_shell_command" },
+    { sessionUpdate: "tool_call", toolCall: { name: "invoke_agent" } },
+    { sessionUpdate: "tool_call", content: { toolCall: { name: "read_file" } } }
+  ];
+
+  assert.deepEqual(
+    updates.map((update) => buildJobEventFromAcpNotification({ params: { update } }).toolName),
+    ["run_shell_command", "invoke_agent", "read_file"]
+  );
+});
+
 test("buildJobEventFromAcpNotification maps file_change to file_change with path and action", () => {
   const event = buildJobEventFromAcpNotification({
     params: {

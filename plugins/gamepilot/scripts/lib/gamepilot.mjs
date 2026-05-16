@@ -43,7 +43,7 @@ export function buildJobEventFromAcpNotification(notification) {
   if (kind === "tool_call") {
     return {
       type: "tool_call",
-      toolName: sanitizeDiagnosticMessage(update.toolName ?? update.name ?? "unknown")
+      toolName: extractToolName(update)
     };
   }
   if (kind === "file_change") {
@@ -104,10 +104,25 @@ function buildThoughtStreamEvent(text, includeText) {
   return event;
 }
 
+function extractToolName(update) {
+  return sanitizeDiagnosticMessage(
+    update?.toolName ??
+      update?.name ??
+      update?.title ??
+      update?.toolCall?.toolName ??
+      update?.toolCall?.name ??
+      update?.content?.toolName ??
+      update?.content?.name ??
+      update?.content?.toolCall?.toolName ??
+      update?.content?.toolCall?.name ??
+      "unknown"
+  ) || "unknown";
+}
+
 function buildToolStreamEvent(update) {
   return {
     type: "tool_call",
-    toolName: sanitizeDiagnosticMessage(update.toolName ?? update.name ?? "unknown") || "unknown"
+    toolName: extractToolName(update)
   };
 }
 
@@ -293,7 +308,7 @@ function dispatchOneNotification(notification, sinks, onStream, options = {}) {
     emitStreamEvent(onStream, ev);
   } else if (update.sessionUpdate === "tool_call") {
     sinks.toolCalls.push({
-      name: update.toolName ?? update.name ?? "unknown",
+      name: extractToolName(update),
       arguments: update.arguments ?? update.input ?? {},
       result: update.result ?? undefined
     });
@@ -499,7 +514,7 @@ export async function runAcpReview(cwd, options = {}) {
     thinking: options.thinking,
     onStream: options.onStream,
     streamThoughtText: options.streamThoughtText,
-    approvalMode: "plan", // Read-only for reviews.
+    approvalMode: "default", // Native /review needs read-only SCM inspection via GamePilot CLI.
     env: options.env,
     onNotification: options.onNotification,
     jobObserver: options.jobObserver,
