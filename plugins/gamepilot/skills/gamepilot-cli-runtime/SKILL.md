@@ -48,21 +48,21 @@ Everything after `--` (or the first non-flag positional) is the task text sent t
 
 ## Job Health Labels
 
-`/gamepilot:status` reports a conservative `Health` label for each active job.
+`/gpc:status` reports a conservative `Health` label for each active job.
 Interpret each label as follows when deciding what to do next:
 
 | Label | Interpretation | Recommend to the user |
 |-------|----------------|-----------------------|
 | `active` | GamePilot emitted progress recently. | Wait for completion; do not cancel. |
-| `quiet` | Heartbeat is recent but no new progress. | Re-check `/gamepilot:status` shortly. |
-| `possibly_stalled` | No recent heartbeat or progress. | Re-check `/gamepilot:status`, fetch `/gamepilot:result`, or retry if the job does not recover. |
-| `rate_limited` | Explicit quota or 429-class diagnostic. | Wait, switch to another Studio-configured model with `--model <model-id>`, or cancel with `/gamepilot:cancel`. |
-| `auth_required` | Explicit auth/credential diagnostic. | Point the user to `/gamepilot:setup` to re-authenticate before retrying. |
+| `quiet` | Heartbeat is recent but no new progress. | Re-check `/gpc:status` shortly. |
+| `possibly_stalled` | No recent heartbeat or progress. | Re-check `/gpc:status`, fetch `/gpc:result`, or retry if the job does not recover. |
+| `rate_limited` | Explicit quota or 429-class diagnostic. | Wait, switch to another Studio-configured model with `--model <model-id>`, or cancel with `/gpc:cancel`. |
+| `auth_required` | Explicit auth/credential diagnostic. | Point the user to `/gpc:setup` to re-authenticate before retrying. |
 | `broker_unhealthy` | The ACP broker reported busy/disconnected. | Re-check status shortly; a restart may be needed if it persists. |
-| `worker_missing` | Worker PID is no longer alive. | Fetch `/gamepilot:result`; retry if the output is incomplete. |
-| `failed` | Worker or GamePilot ended with an error. | Fetch `/gamepilot:result` for the diagnostic and retry only after understanding it. |
-| `completed` | GamePilot finished successfully. | Fetch `/gamepilot:result` and present output; do not retry. |
-| `cancelled` | Job was cancelled by user or system. | Fetch `/gamepilot:result` for final diagnostics; consider retrying if needed. |
+| `worker_missing` | Worker PID is no longer alive. | Fetch `/gpc:result`; retry if the output is incomplete. |
+| `failed` | Worker or GamePilot ended with an error. | Fetch `/gpc:result` for the diagnostic and retry only after understanding it. |
+| `completed` | GamePilot finished successfully. | Fetch `/gpc:result` and present output; do not retry. |
+| `cancelled` | Job was cancelled by user or system. | Fetch `/gpc:result` for final diagnostics; consider retrying if needed. |
 
 Never claim a job is dead or useless based on `quiet` or `possibly_stalled`
 alone. Those labels mean "check again", not "give up".

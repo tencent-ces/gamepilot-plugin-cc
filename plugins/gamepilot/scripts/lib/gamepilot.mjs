@@ -10,6 +10,7 @@ import { readJsonFile } from "./fs.mjs";
 import { BROKER_BUSY_RPC_CODE, BROKER_ENDPOINT_ENV, GamePilotAcpClient } from "./acp-client.mjs";
 import { sanitizeDiagnosticMessage } from "./acp-diagnostics.mjs";
 import { loadBrokerSession } from "./broker-lifecycle.mjs";
+import { buildGamePilotInvocation } from "./gamepilot-command.mjs";
 import { binaryAvailable, runCommand } from "./process.mjs";
 import { collectReviewContext } from "./git.mjs";
 import { loadPrompt } from "./prompts.mjs";
@@ -31,7 +32,7 @@ export function buildJobEventFromAcpNotification(notification) {
   if (kind === "agent_message_chunk") {
     const text = update.content?.text ?? "";
     // Privacy: do NOT record the raw model text on the event log. Only record
-    // the chunk size so /gamepilot:status can show liveness ("model is
+    // the chunk size so /gpc:status can show liveness ("model is
     // streaming") without leaking the model's prose through the event log.
     return { type: "model_text_chunk", chars: String(text).length };
   }
@@ -42,7 +43,7 @@ export function buildJobEventFromAcpNotification(notification) {
   if (kind === "tool_call") {
     return {
       type: "tool_call",
-      toolName: sanitizeDiagnosticMessage(update.toolName ?? update.name ?? "unknown")
+      toolName: extractToolName(update)
     };
   }
   if (kind === "file_change") {
@@ -103,10 +104,25 @@ function buildThoughtStreamEvent(text, includeText) {
   return event;
 }
 
+function extractToolName(update) {
+  return sanitizeDiagnosticMessage(
+    update?.toolName ??
+      update?.name ??
+      update?.title ??
+      update?.toolCall?.toolName ??
+      update?.toolCall?.name ??
+      update?.content?.toolName ??
+      update?.content?.name ??
+      update?.content?.toolCall?.toolName ??
+      update?.content?.toolCall?.name ??
+      "unknown"
+  ) || "unknown";
+}
+
 function buildToolStreamEvent(update) {
   return {
     type: "tool_call",
-    toolName: sanitizeDiagnosticMessage(update.toolName ?? update.name ?? "unknown") || "unknown"
+    toolName: extractToolName(update)
   };
 }
 
@@ -177,17 +193,18 @@ function escapeXmlContent(content, tagName) {
 // ─── Availability & Auth ──────────────────────────────────────────────────────
 
 /**
- * Check whether the GamePilot CLI binary is available on PATH.
+ * Check whether the GamePilot CLI command is available.
  *
  * @returns {{ available: boolean, version: string | null }}
  */
 export function getGamePilotAvailability() {
-  const available = binaryAvailable("gpc");
+  const invocation = buildGamePilotInvocation(["--version"]);
+  const available = binaryAvailable(invocation.command);
   if (!available) {
     return { available: false, version: null };
   }
 
-  const result = runCommand("gpc", ["--version"]);
+  const result = runCommand(invocation.command, invocation.args);
   const version = result.status === 0 ? result.stdout.trim() : null;
   return { available: true, version };
 }
@@ -291,7 +308,7 @@ function dispatchOneNotification(notification, sinks, onStream, options = {}) {
     emitStreamEvent(onStream, ev);
   } else if (update.sessionUpdate === "tool_call") {
     sinks.toolCalls.push({
-      name: update.toolName ?? update.name ?? "unknown",
+      name: extractToolName(update),
       arguments: update.arguments ?? update.input ?? {},
       result: update.result ?? undefined
     });
@@ -337,6 +354,7 @@ export const __testing = {
   simulateNotificationDispatch(notifications, onStream, options) {
     return dispatchNotifications(notifications, onStream, options);
   },
+  buildReviewSlashCommand,
   emitThinkingWarningIfNew,
   resetThinkingWarning
 };
@@ -482,36 +500,21 @@ export async function runAcpPrompt(cwd, prompt, options = {}) {
 }
 
 /**
- * Run a code review via ACP. Collects git context and sends a review prompt.
+ * Run a code review via GamePilot CLI's native ACP /review command.
  *
  * @param {string} cwd
  * @param {{ scope?: string, base?: string, model?: string, thinking?: "off"|"low"|"medium"|"high", env?: NodeJS.ProcessEnv, onNotification?: (n: any) => void, onStream?: (event: any) => void, streamThoughtText?: boolean }} [options]
  * @returns {Promise<{ text: string, sessionId: string | null, scope: string, summary: string, error: unknown }>}
  */
 export async function runAcpReview(cwd, options = {}) {
-  const { scope, context } = collectReviewContext(cwd, {
-    scope: options.scope,
-    base: options.base
-  });
+  const { command, scope, summary } = buildReviewSlashCommand(options);
 
-  if (!context.diff && scope === "working-tree" && context.untrackedContents?.length === 0) {
-    return {
-      text: "No changes detected in the working tree. Nothing to review.",
-      sessionId: null,
-      scope,
-      summary: "No changes",
-      error: null
-    };
-  }
-
-  const reviewPrompt = buildReviewPrompt(scope, context);
-
-  const result = await runAcpPrompt(cwd, reviewPrompt, {
+  const result = await runAcpPrompt(cwd, command, {
     model: options.model,
     thinking: options.thinking,
     onStream: options.onStream,
     streamThoughtText: options.streamThoughtText,
-    approvalMode: "plan", // Read-only for reviews.
+    approvalMode: "default", // Native /review needs read-only SCM inspection via GamePilot CLI.
     env: options.env,
     onNotification: options.onNotification,
     jobObserver: options.jobObserver,
@@ -522,7 +525,7 @@ export async function runAcpReview(cwd, options = {}) {
     text: result.text,
     sessionId: result.sessionId,
     scope,
-    summary: context.summary,
+    summary,
     error: result.error
   };
 }
@@ -705,65 +708,46 @@ export function readOutputSchema(schemaPath) {
 }
 
 /**
- * Build a review prompt from collected git context.
+ * Build the native GamePilot CLI /review command sent through ACP.
  *
- * @param {string} scope
- * @param {any} context
- * @returns {string}
+ * @param {{ scope?: string, base?: string }} [options]
+ * @returns {{ command: string, scope: string, summary: string }}
  */
-function buildReviewPrompt(scope, context) {
-  const lines = [];
-  lines.push("<role>");
-  lines.push("You are GamePilot performing a code review.");
-  lines.push("Review the provided changes for correctness, security, performance, and maintainability.");
-  lines.push("</role>");
-  lines.push("");
-  lines.push("<task>");
-  lines.push(`Review the following ${scope === "branch" ? "branch" : "working tree"} changes.`);
-  lines.push("Focus on material issues: bugs, security vulnerabilities, data loss risks, and correctness problems.");
-  lines.push("Do not comment on style, naming, or formatting unless it creates a functional issue.");
-  lines.push("</task>");
-  lines.push("");
-
-  if (context.summary) {
-    lines.push("<context>");
-    lines.push(context.summary);
-    lines.push("</context>");
-    lines.push("");
+function buildReviewSlashCommand(options = {}) {
+  const scope = options.scope ?? "auto";
+  if (!new Set(["auto", "working-tree", "branch"]).has(scope)) {
+    throw new Error(`Invalid scope "${scope}". Must be one of: auto, working-tree, branch`);
   }
 
-  if (context.diff) {
-    lines.push("<diff>");
-    lines.push(escapeXmlContent(context.diff, "diff"));
-    lines.push("</diff>");
-    lines.push("");
+  if (options.base) {
+    return {
+      command: `/review changes against ${options.base}`,
+      scope: "branch",
+      summary: `Native GamePilot /review against ${options.base}`
+    };
   }
 
-  if (context.commits) {
-    lines.push("<commits>");
-    lines.push(escapeXmlContent(context.commits, "commits"));
-    lines.push("</commits>");
-    lines.push("");
+  if (scope === "branch") {
+    return {
+      command: "/review branch changes",
+      scope,
+      summary: "Native GamePilot /review for branch changes"
+    };
   }
 
-  if (context.untrackedContents?.length > 0) {
-    for (const file of context.untrackedContents) {
-      if (file.content) {
-        lines.push(`<untracked_file path="${file.path}">`);
-        lines.push(escapeXmlContent(file.content, "untracked_file"));
-        lines.push("</untracked_file>");
-        lines.push("");
-      }
-    }
+  if (scope === "working-tree") {
+    return {
+      command: "/review current SCM changes",
+      scope,
+      summary: "Native GamePilot /review for current SCM changes"
+    };
   }
 
-  lines.push("<grounding_rules>");
-  lines.push("Every finding must be grounded in the provided diff or file contents.");
-  lines.push("Do not speculate about code you cannot see.");
-  lines.push("If a finding depends on an inference, state that explicitly.");
-  lines.push("</grounding_rules>");
-
-  return lines.join("\n");
+  return {
+    command: "/review current SCM changes",
+    scope,
+    summary: "Native GamePilot /review for current SCM changes"
+  };
 }
 
 /**

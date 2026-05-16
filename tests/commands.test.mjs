@@ -216,7 +216,7 @@ test("gamepilot-result-handling skill forbids fabricating results for incomplete
 
   assert.match(resultHandling, /do not fabricate|do not invent|never fabricate/i);
   assert.match(resultHandling, /incomplete|non-terminal|still running|in progress/i);
-  assert.match(resultHandling, /\/gamepilot:(status|cancel|result)/);
+  assert.match(resultHandling, /\/gpc:(status|cancel|result)/);
 });
 
 test("companion task rejects an invalid --thinking value with exit 1 and usage", () => {

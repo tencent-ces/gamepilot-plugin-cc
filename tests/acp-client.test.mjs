@@ -66,6 +66,18 @@ test("handleChunk emits synthetic acp-transport diagnostic on line-buffer overfl
   assert.ok(diagnostics.some((d) => d.source === "acp-transport"));
 });
 
+test("waitForExitOrTimeout resolves normally before timeout", async () => {
+  const result = await __testing.waitForExitOrTimeout(Promise.resolve(), 50);
+  assert.deepEqual(result, { timedOut: false });
+});
+
+test("waitForExitOrTimeout returns timedOut for hung exit promise", async () => {
+  const startedAt = Date.now();
+  const result = await __testing.waitForExitOrTimeout(new Promise(() => {}), 10);
+  assert.deepEqual(result, { timedOut: true });
+  assert.ok(Date.now() - startedAt < 1000);
+});
+
 test("broker-mode single-dispatches broker/diagnostic to onDiagnostic only", () => {
   const { client, diagnostics, notifications } = makeFakeClient("broker");
 

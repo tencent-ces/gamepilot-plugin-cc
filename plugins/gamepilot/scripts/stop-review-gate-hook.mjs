@@ -41,7 +41,7 @@ function logNote(note) {
 function buildSetupNote() {
   const { available } = getGamePilotAvailability();
   if (!available) {
-    return "GamePilot CLI is not installed. Run /gamepilot:setup to install.";
+    return "GamePilot CLI is not installed. Run /gpc:setup to install.";
   }
   return null;
 }
@@ -107,7 +107,7 @@ function main() {
     const jobs = listJobs(workspaceRoot);
     const active = jobs.filter((j) => j.status === "running" || j.status === "queued");
     if (active.length > 0) {
-      runningTaskNote = `Note: ${active.length} GamePilot job(s) still active. Run /gamepilot:status to check.`;
+      runningTaskNote = `Note: ${active.length} GamePilot job(s) still active. Run /gpc:status to check.`;
     }
   } catch {
     // Ignore.

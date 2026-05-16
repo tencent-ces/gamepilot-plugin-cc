@@ -99,7 +99,7 @@ function classifyRuntimeHealth(job, options = {}) {
     return {
       healthStatus: "worker_missing",
       healthMessage: "Worker process is no longer running.",
-      recommendedAction: "Check /gamepilot:result or /gamepilot:status, then retry if the result is incomplete."
+      recommendedAction: "Check /gpc:result or /gpc:status, then retry if the result is incomplete."
     };
   }
 
@@ -133,7 +133,7 @@ function classifyRuntimeHealth(job, options = {}) {
     return {
       healthStatus: "possibly_stalled",
       healthMessage: "No recent worker heartbeat or progress was recorded.",
-      recommendedAction: "Check /gamepilot:status or /gamepilot:result, then retry if the job does not recover."
+      recommendedAction: "Check /gpc:status or /gpc:result, then retry if the job does not recover."
     };
   }
 
@@ -237,7 +237,7 @@ export function buildSingleJobSnapshot(cwd, reference, options = {}) {
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
   const selected = matchJobReference(jobs, reference);
   if (!selected) {
-    throw new Error(`No job found for "${reference}". Run /gamepilot:status to inspect known jobs.`);
+    throw new Error(`No job found for "${reference}". Run /gpc:status to inspect known jobs.`);
   }
 
   return {
@@ -269,12 +269,12 @@ export function resolveResultJob(cwd, reference) {
   const active = matchJobReference(jobs, reference, (job) => job.status === "running" || job.status === "queued");
   if (active) {
     throw new Error(
-      `Job ${active.id} is still ${active.status}. Run /gamepilot:status ${active.id} to check progress, or /gamepilot:status ${active.id} --wait to wait.`
+      `Job ${active.id} is still ${active.status}. Run /gpc:status ${active.id} to check progress, or /gpc:status ${active.id} --wait to wait.`
     );
   }
 
   if (reference) {
-    throw new Error(`No job found for "${reference}". Run /gamepilot:status to inspect active jobs.`);
+    throw new Error(`No job found for "${reference}". Run /gpc:status to inspect active jobs.`);
   }
 
   throw new Error("No finished GamePilot jobs found for this repository yet.");

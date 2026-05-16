@@ -17,6 +17,7 @@ import { spawn } from "node:child_process";
 import readline from "node:readline";
 import { parseBrokerEndpoint } from "./broker-endpoint.mjs";
 import { ensureBrokerSession, loadBrokerSession } from "./broker-lifecycle.mjs";
+import { buildGamePilotInvocation } from "./gamepilot-command.mjs";
 import { terminateProcessTree } from "./process.mjs";
 import { attachStderrDiagnosticCollector, BROKER_DIAGNOSTIC_METHOD, sanitizeDiagnosticMessage } from "./acp-diagnostics.mjs";
 
@@ -30,6 +31,24 @@ export const BROKER_BUSY_RPC_CODE = -32001;
 // against memory growth from a peer that never emits a newline. Full ACP
 // messages are line-delimited and normally well under 1 MiB.
 export const ACP_MAX_LINE_BUFFER = 1 << 20;
+export const DIRECT_CLOSE_GRACE_MS = 50;
+export const DIRECT_CLOSE_TIMEOUT_MS = 2000;
+export const BROKER_CLOSE_TIMEOUT_MS = 2000;
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForExitOrTimeout(exitPromise, timeoutMs) {
+  let timedOut = false;
+  await Promise.race([
+    exitPromise,
+    delay(timeoutMs).then(() => {
+      timedOut = true;
+    })
+  ]);
+  return { timedOut };
+}
 
 /**
  * @typedef {import("./acp-protocol").JsonRpcRequest} JsonRpcRequest
@@ -240,17 +259,20 @@ class SpawnedAcpClient extends AcpClientBase {
   }
 
   async initialize() {
-    this.proc = spawn("gpc", ["--acp"], {
+    const env = this.options.env ?? process.env;
+    const invocation = buildGamePilotInvocation(["--acp"], env);
+    this.proc = spawn(invocation.command, invocation.args, {
       cwd: this.cwd,
-      env: this.options.env ?? process.env,
+      env,
       stdio: ["pipe", "pipe", "pipe"]
     });
+    this.displayCommand = invocation.display;
 
     const rl = readline.createInterface({ input: this.proc.stdout });
     rl.on("line", (line) => this.handleLine(line));
 
     this.proc.on("exit", (code) => {
-      this.handleExit(code !== 0 ? new Error(`gpc --acp exited with code ${code}`) : null);
+      this.handleExit(code !== 0 ? new Error(`${this.displayCommand} exited with code ${code}`) : null);
     });
 
     this.proc.on("error", (error) => {
@@ -285,7 +307,9 @@ class SpawnedAcpClient extends AcpClientBase {
       this.proc.stdin.end();
     }
 
-    // Give a grace period, then force kill.
+    // Give a grace period, then force kill. Do not wait forever: some ACP
+    // children finish the request but keep process handles alive after stdin
+    // closes, which would otherwise make foreground plugin commands hang.
     if (pid) {
       setTimeout(() => {
         try {
@@ -293,10 +317,20 @@ class SpawnedAcpClient extends AcpClientBase {
         } catch {
           // Already exited.
         }
-      }, 50).unref?.();
+      }, DIRECT_CLOSE_GRACE_MS).unref?.();
     }
 
-    await this.exitPromise;
+    const { timedOut } = await waitForExitOrTimeout(this.exitPromise, DIRECT_CLOSE_TIMEOUT_MS);
+    if (timedOut && this.onDiagnostic) {
+      try {
+        this.onDiagnostic({
+          source: "direct-close-timeout",
+          message: `Timed out waiting for ${this.displayCommand} to exit after close; continuing.`
+        });
+      } catch {
+        // Best-effort.
+      }
+    }
   }
 
   sendMessage(message) {
@@ -350,7 +384,26 @@ class BrokerAcpClient extends AcpClientBase {
     if (this.socket) {
       this.socket.end();
     }
-    await this.exitPromise;
+
+    const { timedOut } = await waitForExitOrTimeout(this.exitPromise, BROKER_CLOSE_TIMEOUT_MS);
+    if (timedOut) {
+      try {
+        this.socket?.destroy();
+      } catch {
+        // Already closed.
+      }
+      this.handleExit(null);
+      if (this.onDiagnostic) {
+        try {
+          this.onDiagnostic({
+            source: "broker-close-timeout",
+            message: "Timed out waiting for ACP broker socket to close; continuing."
+          });
+        } catch {
+          // Best-effort.
+        }
+      }
+    }
   }
 
   sendMessage(message) {
@@ -370,6 +423,8 @@ class BrokerAcpClient extends AcpClientBase {
 // prefixed with `__` is test-only.
 
 export const __testing = {
+  waitForExitOrTimeout,
+
   /**
    * Invoke AcpClientBase.handleLine against a fake client object.
    *
@@ -428,8 +483,8 @@ export class GamePilotAcpClient {
       } catch (error) {
         // If broker is busy, fall through to direct spawn.
         const fallbackMessage = error?.code === BROKER_BUSY_RPC_CODE
-          ? "Broker busy, falling back to direct gpc --acp spawn."
-          : `Broker connection failed (${error?.message ?? error}), falling back to direct spawn.`;
+          ? "Broker busy, falling back to direct GamePilot ACP spawn."
+          : `Broker connection failed (${error?.message ?? error}), falling back to direct GamePilot ACP spawn.`;
         process.stderr.write(`${fallbackMessage}\n`);
         if (typeof options.onDiagnostic === "function") {
           try {

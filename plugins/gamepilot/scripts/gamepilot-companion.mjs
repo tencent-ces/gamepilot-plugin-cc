@@ -603,12 +603,12 @@ async function runReviewInBackground(workspaceRoot, options, kind) {
   const payload = {
     jobId: job.id,
     status: "queued",
-    message: `Background ${kind} started. Run /gamepilot:status ${job.id} to check progress.`
+    message: `Background ${kind} started. Run /gpc:status ${job.id} to check progress.`
   };
 
   outputCommandResult(
     payload,
-    `Background ${kind} started: ${job.id}\nRun /gamepilot:status ${job.id} to check progress.\n`,
+    `Background ${kind} started: ${job.id}\nRun /gpc:status ${job.id} to check progress.\n`,
     options.json
   );
 }
@@ -626,12 +626,12 @@ async function runTaskInBackground(workspaceRoot, request) {
   const payload = {
     jobId: job.id,
     status: "queued",
-    message: `Background task started. Run /gamepilot:status ${job.id} to check progress.`
+    message: `Background task started. Run /gpc:status ${job.id} to check progress.`
   };
 
   outputCommandResult(
     payload,
-    `Background task started: ${job.id}\nRun /gamepilot:status ${job.id} to check progress.\n`,
+    `Background task started: ${job.id}\nRun /gpc:status ${job.id} to check progress.\n`,
     request.json
   );
 }

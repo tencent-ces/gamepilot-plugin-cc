@@ -349,7 +349,7 @@ test("non-terminal events preserve terminal health", async () => {
 
   const stored = readJobFile(workspace, job.id);
   assert.equal(stored.healthStatus, "completed");
-  assert.equal(stored.recommendedAction, "Run /gamepilot:result to inspect the completed job output.");
+  assert.equal(stored.recommendedAction, "Run /gpc:result to inspect the completed job output.");
   assert.equal(stored.lastProgressAt, undefined);
   assert.equal(stored.lastDiagnosticAt, undefined);
 });
