@@ -80,7 +80,7 @@ let nextRpcId = 1;
 /** @type {Map<number, { clientSocket: net.Socket, clientId: number }>} */
 const pendingRequests = new Map();
 
-/** @type {Map<number | string, net.Socket>} */
+/** @type {Map<string, net.Socket>} */
 const pendingPeerRequests = new Map();
 
 /** @type {net.Socket | null} */
@@ -178,7 +178,7 @@ function handleAcpLine(line) {
   // use this path and require the active client to send a response back.
   if (message.method && "id" in message && message.id !== null) {
     if (activeClient && !activeClient.destroyed) {
-      pendingPeerRequests.set(message.id, activeClient);
+      pendingPeerRequests.set(String(message.id), activeClient);
       send(activeClient, message);
     } else {
       sendToAcp({
@@ -241,6 +241,23 @@ function handleAcpLine(line) {
 
 // ─── Client Connection Handling ───────────────────────────────────────────────
 
+/** Remove all pending request entries associated with a disconnecting socket. */
+function cleanupSocket(socket) {
+  for (const [id, pending] of pendingRequests) {
+    if (pending.clientSocket === socket) {
+      pendingRequests.delete(id);
+    }
+  }
+  for (const [id, requestSocket] of pendingPeerRequests) {
+    if (requestSocket === socket) {
+      pendingPeerRequests.delete(id);
+    }
+  }
+  if (activeClient === socket) {
+    activeClient = null;
+  }
+}
+
 function handleClientConnection(socket) {
   let lineBuffer = "";
 
@@ -266,31 +283,11 @@ function handleClientConnection(socket) {
   });
 
   socket.on("error", () => {
-    // Clean up any pending requests for this socket.
-    for (const [id, pending] of pendingRequests) {
-      if (pending.clientSocket === socket) {
-        pendingRequests.delete(id);
-      }
-    }
-    for (const [id, requestSocket] of pendingPeerRequests) {
-      if (requestSocket === socket) {
-        pendingPeerRequests.delete(id);
-      }
-    }
-    if (activeClient === socket) {
-      activeClient = null;
-    }
+    cleanupSocket(socket);
   });
 
   socket.on("close", () => {
-    for (const [id, requestSocket] of pendingPeerRequests) {
-      if (requestSocket === socket) {
-        pendingPeerRequests.delete(id);
-      }
-    }
-    if (activeClient === socket) {
-      activeClient = null;
-    }
+    cleanupSocket(socket);
   });
 }
 
@@ -337,9 +334,10 @@ function handleClientMessage(socket, line) {
   // Handle client response to a child-to-client request such as
   // session/request_permission.
   if (!message.method && "id" in message && message.id !== null) {
-    const requestSocket = pendingPeerRequests.get(message.id);
+    const normalizedId = String(message.id);
+    const requestSocket = pendingPeerRequests.get(normalizedId);
     if (requestSocket === socket) {
-      pendingPeerRequests.delete(message.id);
+      pendingPeerRequests.delete(normalizedId);
       sendToAcp({
         jsonrpc: "2.0",
         id: message.id,

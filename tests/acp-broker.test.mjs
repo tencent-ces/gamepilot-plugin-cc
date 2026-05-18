@@ -91,6 +91,12 @@ test("broker round-trips child permission requests through the active client", (
   assert.equal(socket.writes[0].method, "session/request_permission");
   assert.equal(socket.writes[0].id, 77);
 
+  // In production the socket's "data" listener is wired up when the connection
+  // is first accepted. Here we call handleClientConnection *after* the request
+  // was forwarded because the test socket is a plain EventEmitter — calling
+  // handleClientConnection registers the "data" handler so the subsequent emit
+  // is dispatched. This mirrors the real flow where data always arrives after
+  // connection setup.
   brokerTesting.handleClientConnection(socket);
   socket.emit("data", `${JSON.stringify({
     jsonrpc: "2.0",

@@ -90,12 +90,29 @@ class AcpClientBase {
 
     /** @type {InitializeResult | null} */
     this.capabilities = null;
+
+    /**
+     * The approval mode for the current session. Only auto-approve write
+     * permissions when the session is in a mode that explicitly grants writes
+     * (autoEdit or yolo). In default/plan modes permission prompts are denied
+     * so that the server returns a tool error instead of hanging.
+     * @type {string | null}
+     */
+    this.approvalMode = null;
   }
 
   selectPermissionOption(options) {
     if (!Array.isArray(options) || options.length === 0) {
       return null;
     }
+
+    // Only auto-approve in modes that explicitly grant write permission.
+    const mode = this.approvalMode;
+    const autoApprove = mode === "autoEdit" || mode === "yolo";
+    if (!autoApprove) {
+      return null;
+    }
+
     return (
       options.find((option) => option?.kind === "allow_always") ??
       options.find((option) => option?.kind === "allow_once") ??
@@ -496,28 +513,54 @@ class BrokerAcpClient extends AcpClientBase {
 // child process or bind a broker socket. Not part of the public API — anything
 // prefixed with `__` is test-only.
 
+/**
+ * A lightweight AcpClientBase subclass for unit tests. Inherits all dispatch
+ * methods (handleLine, handlePeerRequest, selectPermissionOption) so there is
+ * no need to manually shim them — new methods added to the class are
+ * automatically available.
+ */
+class TestAcpClient extends AcpClientBase {
+  constructor(clientState) {
+    super(clientState.cwd ?? "/tmp", {
+      onNotification: clientState.onNotification ?? null,
+      onDiagnostic: clientState.onDiagnostic ?? null
+    });
+    this.transport = clientState.transport ?? "direct";
+    if (clientState.pending) {
+      this.pending = clientState.pending;
+    }
+    if (clientState.approvalMode !== undefined) {
+      this.approvalMode = clientState.approvalMode;
+    }
+    if (typeof clientState.sendMessage === "function") {
+      this.sendMessage = clientState.sendMessage;
+    }
+  }
+
+  sendMessage(_message) {
+    // Default no-op; tests override via constructor state.
+  }
+}
+
 export const __testing = {
   waitForExitOrTimeout,
+  TestAcpClient,
 
   /**
-   * Invoke AcpClientBase.handleLine against a fake client object.
+   * Invoke AcpClientBase.handleLine against a fake client object using a
+   * proper TestAcpClient subclass instance. This avoids having to manually
+   * shim new methods each time the base class is extended.
    *
    * @param {{ transport: string, pending: Map<number, any>, nextId: number,
-   *           lineBuffer: string, onNotification?: Function,
+   *           lineBuffer: string, approvalMode?: string,
+   *           sendMessage?: Function,
+   *           onNotification?: Function,
    *           onDiagnostic?: Function }} client
    * @param {string} line
    */
   handleLineOn(client, line) {
-    const target = {
-      ...client,
-      selectPermissionOption(options) {
-        return AcpClientBase.prototype.selectPermissionOption.call(this, options);
-      },
-      handlePeerRequest(message) {
-        return AcpClientBase.prototype.handlePeerRequest.call(this, message);
-      }
-    };
-    return AcpClientBase.prototype.handleLine.call(target, line);
+    const instance = new TestAcpClient(client);
+    instance.handleLine(line);
   },
 
   /**
