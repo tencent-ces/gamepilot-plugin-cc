@@ -92,6 +92,42 @@ class AcpClientBase {
     this.capabilities = null;
   }
 
+  selectPermissionOption(options) {
+    if (!Array.isArray(options) || options.length === 0) {
+      return null;
+    }
+    return (
+      options.find((option) => option?.kind === "allow_always") ??
+      options.find((option) => option?.kind === "allow_once") ??
+      options.find((option) => /allow|accept|approve|yes/i.test(String(option?.optionId ?? ""))) ??
+      null
+    );
+  }
+
+  handlePeerRequest(message) {
+    if (message.method === "session/request_permission") {
+      const selected = this.selectPermissionOption(message.params?.options);
+      const outcome = selected
+        ? { outcome: "selected", optionId: selected.optionId }
+        : { outcome: "cancelled" };
+      this.sendMessage({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { outcome }
+      });
+      return;
+    }
+
+    this.sendMessage({
+      jsonrpc: "2.0",
+      id: message.id,
+      error: {
+        code: -32601,
+        message: `Unsupported server request: ${message.method}`
+      }
+    });
+  }
+
   handleLine(line) {
     const trimmed = line.trim();
     if (!trimmed) {
@@ -105,7 +141,15 @@ class AcpClientBase {
       return;
     }
 
-    // Response (has id).
+    // Server-to-client request (has both id and method). This is distinct from
+    // a response to one of our requests; write-capable runs use this path for
+    // permission prompts and will hang forever if it is dropped.
+    if (message.method && "id" in message && message.id !== null) {
+      this.handlePeerRequest(message);
+      return;
+    }
+
+    // Response (has id, no method).
     if ("id" in message && message.id !== null) {
       const pending = this.pending.get(message.id);
       if (pending) {
@@ -264,11 +308,13 @@ class SpawnedAcpClient extends AcpClientBase {
     this.proc = spawn(invocation.command, invocation.args, {
       cwd: this.cwd,
       env,
+      detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe"]
     });
     this.displayCommand = invocation.display;
 
     const rl = readline.createInterface({ input: this.proc.stdout });
+    this.stdoutReader = rl;
     rl.on("line", (line) => this.handleLine(line));
 
     this.proc.on("exit", (code) => {
@@ -321,14 +367,42 @@ class SpawnedAcpClient extends AcpClientBase {
     }
 
     const { timedOut } = await waitForExitOrTimeout(this.exitPromise, DIRECT_CLOSE_TIMEOUT_MS);
-    if (timedOut && this.onDiagnostic) {
+    if (timedOut) {
       try {
-        this.onDiagnostic({
-          source: "direct-close-timeout",
-          message: `Timed out waiting for ${this.displayCommand} to exit after close; continuing.`
-        });
+        this.stdoutReader?.close();
       } catch {
-        // Best-effort.
+        // Already closed.
+      }
+      try {
+        this.proc?.stdout?.destroy();
+      } catch {
+        // Already closed.
+      }
+      try {
+        this.proc?.stderr?.destroy();
+      } catch {
+        // Already closed.
+      }
+      try {
+        this.proc?.stdin?.destroy();
+      } catch {
+        // Already closed.
+      }
+      try {
+        this.proc?.unref();
+      } catch {
+        // Already exited.
+      }
+      this.handleExit(null);
+      if (this.onDiagnostic) {
+        try {
+          this.onDiagnostic({
+            source: "direct-close-timeout",
+            message: `Timed out waiting for ${this.displayCommand} to exit after close; continuing.`
+          });
+        } catch {
+          // Best-effort.
+        }
       }
     }
   }
@@ -434,7 +508,16 @@ export const __testing = {
    * @param {string} line
    */
   handleLineOn(client, line) {
-    return AcpClientBase.prototype.handleLine.call(client, line);
+    const target = {
+      ...client,
+      selectPermissionOption(options) {
+        return AcpClientBase.prototype.selectPermissionOption.call(this, options);
+      },
+      handlePeerRequest(message) {
+        return AcpClientBase.prototype.handlePeerRequest.call(this, message);
+      }
+    };
+    return AcpClientBase.prototype.handleLine.call(target, line);
   },
 
   /**

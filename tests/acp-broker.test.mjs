@@ -66,3 +66,41 @@ test("broker still forwards legitimate child notifications (regression guard)", 
   assert.equal(socket.writes.length, 1);
   assert.equal(socket.writes[0].method, "session/update");
 });
+
+test("broker round-trips child permission requests through the active client", () => {
+  brokerTesting.resetBrokerState();
+  const socket = makeSocket();
+  const acpWrites = [];
+  brokerTesting.setActiveClient(socket);
+  brokerTesting.setReadyAcpProcess({
+    stdin: {
+      write(line) {
+        acpWrites.push(JSON.parse(line));
+      }
+    }
+  });
+
+  brokerTesting.handleAcpLine(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 77,
+    method: "session/request_permission",
+    params: { options: [{ optionId: "acceptEdits", kind: "allow_once" }] }
+  }));
+
+  assert.equal(socket.writes.length, 1);
+  assert.equal(socket.writes[0].method, "session/request_permission");
+  assert.equal(socket.writes[0].id, 77);
+
+  brokerTesting.handleClientConnection(socket);
+  socket.emit("data", `${JSON.stringify({
+    jsonrpc: "2.0",
+    id: 77,
+    result: { outcome: { outcome: "selected", optionId: "acceptEdits" } }
+  })}\n`);
+
+  assert.deepEqual(acpWrites, [{
+    jsonrpc: "2.0",
+    id: 77,
+    result: { outcome: { outcome: "selected", optionId: "acceptEdits" } }
+  }]);
+});

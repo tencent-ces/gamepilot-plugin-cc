@@ -80,6 +80,9 @@ let nextRpcId = 1;
 /** @type {Map<number, { clientSocket: net.Socket, clientId: number }>} */
 const pendingRequests = new Map();
 
+/** @type {Map<number | string, net.Socket>} */
+const pendingPeerRequests = new Map();
+
 /** @type {net.Socket | null} */
 let activeClient = null;
 
@@ -171,7 +174,23 @@ function handleAcpLine(line) {
     return;
   }
 
-  // Handle response (has id).
+  // Handle child-to-client request (has both id and method). Permission prompts
+  // use this path and require the active client to send a response back.
+  if (message.method && "id" in message && message.id !== null) {
+    if (activeClient && !activeClient.destroyed) {
+      pendingPeerRequests.set(message.id, activeClient);
+      send(activeClient, message);
+    } else {
+      sendToAcp({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: buildJsonRpcError(-32000, "No active client for ACP server request.")
+      });
+    }
+    return;
+  }
+
+  // Handle response (has id, no method).
   if ("id" in message && message.id !== null) {
     const pending = pendingRequests.get(message.id);
     if (pending) {
@@ -253,12 +272,22 @@ function handleClientConnection(socket) {
         pendingRequests.delete(id);
       }
     }
+    for (const [id, requestSocket] of pendingPeerRequests) {
+      if (requestSocket === socket) {
+        pendingPeerRequests.delete(id);
+      }
+    }
     if (activeClient === socket) {
       activeClient = null;
     }
   });
 
   socket.on("close", () => {
+    for (const [id, requestSocket] of pendingPeerRequests) {
+      if (requestSocket === socket) {
+        pendingPeerRequests.delete(id);
+      }
+    }
     if (activeClient === socket) {
       activeClient = null;
     }
@@ -303,6 +332,22 @@ function handleClientMessage(socket, line) {
       }
     });
     return;
+  }
+
+  // Handle client response to a child-to-client request such as
+  // session/request_permission.
+  if (!message.method && "id" in message && message.id !== null) {
+    const requestSocket = pendingPeerRequests.get(message.id);
+    if (requestSocket === socket) {
+      pendingPeerRequests.delete(message.id);
+      sendToAcp({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: message.result,
+        error: message.error
+      });
+      return;
+    }
   }
 
   // Check if broker is busy.
@@ -383,9 +428,14 @@ export const __testing = {
   setActiveClient(socket) {
     activeClient = socket;
   },
+  setReadyAcpProcess(processLike = { stdin: { write() {} } }) {
+    acpProcess = processLike;
+    acpReady = true;
+  },
   resetBrokerState() {
     diagnosticRing.length = 0;
     pendingRequests.clear();
+    pendingPeerRequests.clear();
     activeClient = null;
     acpProcess = null;
     acpReady = false;
