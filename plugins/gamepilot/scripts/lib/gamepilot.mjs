@@ -430,6 +430,9 @@ export async function runAcpPrompt(cwd, prompt, options = {}) {
       } catch (error) {
         process.stderr.write(`Warning: could not set mode to ${modeId}: ${error?.message ?? error}\n`);
       }
+      // Propagate the resolved mode to the client so permission prompts are
+      // handled consistently: auto-approve only in autoEdit/yolo modes.
+      client.approvalMode = modeId;
     }
 
     // Set model if requested.

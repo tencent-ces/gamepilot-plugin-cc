@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { __testing } from "../plugins/gamepilot/scripts/lib/acp-client.mjs";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ACP_CLIENT_SOURCE = fs.readFileSync(path.join(ROOT, "plugins/gamepilot/scripts/lib/acp-client.mjs"), "utf8");
 
 /**
  * Build a minimal fake ACP client that mimics the fields AcpClientBase.handleLine
@@ -101,4 +108,106 @@ test("broker-mode single-dispatches broker/diagnostic to onDiagnostic only", () 
     0,
     "Broker-mode must NOT double-dispatch broker/diagnostic to onNotification."
   );
+});
+
+test("session/request_permission selects an offered allow optionId", () => {
+  const writes = [];
+  const { client } = makeFakeClient("direct");
+  client.approvalMode = "autoEdit";
+  client.sendMessage = (message) => {
+    writes.push(message);
+  };
+
+  __testing.handleLineOn(client, JSON.stringify({
+    jsonrpc: "2.0",
+    id: 99,
+    method: "session/request_permission",
+    params: {
+      options: [
+        { optionId: "deny-edits", kind: "reject_once" },
+        { optionId: "acceptEdits", kind: "allow_once" }
+      ]
+    }
+  }));
+
+  assert.deepEqual(writes, [{
+    jsonrpc: "2.0",
+    id: 99,
+    result: {
+      outcome: {
+        outcome: "selected",
+        optionId: "acceptEdits"
+      }
+    }
+  }]);
+});
+
+test("session/request_permission cancels in default mode (no auto-approve)", () => {
+  const writes = [];
+  const { client } = makeFakeClient("direct");
+  // No approvalMode set (defaults to null) — simulates default/plan mode.
+  client.sendMessage = (message) => {
+    writes.push(message);
+  };
+
+  __testing.handleLineOn(client, JSON.stringify({
+    jsonrpc: "2.0",
+    id: 101,
+    method: "session/request_permission",
+    params: {
+      options: [
+        { optionId: "deny-edits", kind: "reject_once" },
+        { optionId: "acceptEdits", kind: "allow_once" }
+      ]
+    }
+  }));
+
+  assert.deepEqual(writes, [{
+    jsonrpc: "2.0",
+    id: 101,
+    result: {
+      outcome: {
+        outcome: "cancelled"
+      }
+    }
+  }]);
+});
+
+test("session/request_permission cancels explicitly in plan mode", () => {
+  const writes = [];
+  const { client } = makeFakeClient("direct");
+  client.approvalMode = "plan";
+  client.sendMessage = (message) => {
+    writes.push(message);
+  };
+
+  __testing.handleLineOn(client, JSON.stringify({
+    jsonrpc: "2.0",
+    id: 102,
+    method: "session/request_permission",
+    params: {
+      options: [
+        { optionId: "acceptEdits", kind: "allow_always" }
+      ]
+    }
+  }));
+
+  assert.deepEqual(writes, [{
+    jsonrpc: "2.0",
+    id: 102,
+    result: {
+      outcome: {
+        outcome: "cancelled"
+      }
+    }
+  }]);
+});
+
+test("direct ACP close timeout releases child process handles", () => {
+  assert.match(ACP_CLIENT_SOURCE, /detached:\s*process\.platform\s*!==\s*"win32"/);
+  assert.match(ACP_CLIENT_SOURCE, /this\.stdoutReader\?\.close\(\)/);
+  assert.match(ACP_CLIENT_SOURCE, /this\.proc\?\.stdout\?\.destroy\(\)/);
+  assert.match(ACP_CLIENT_SOURCE, /this\.proc\?\.stderr\?\.destroy\(\)/);
+  assert.match(ACP_CLIENT_SOURCE, /this\.proc\?\.stdin\?\.destroy\(\)/);
+  assert.match(ACP_CLIENT_SOURCE, /this\.proc\?\.unref\(\)/);
 });

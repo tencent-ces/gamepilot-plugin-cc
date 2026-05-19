@@ -90,6 +90,59 @@ class AcpClientBase {
 
     /** @type {InitializeResult | null} */
     this.capabilities = null;
+
+    /**
+     * The approval mode for the current session. Only auto-approve write
+     * permissions when the session is in a mode that explicitly grants writes
+     * (autoEdit or yolo). In default/plan modes permission prompts are denied
+     * so that the server returns a tool error instead of hanging.
+     * @type {string | null}
+     */
+    this.approvalMode = null;
+  }
+
+  selectPermissionOption(options) {
+    if (!Array.isArray(options) || options.length === 0) {
+      return null;
+    }
+
+    // Only auto-approve in modes that explicitly grant write permission.
+    const mode = this.approvalMode;
+    const autoApprove = mode === "autoEdit" || mode === "yolo";
+    if (!autoApprove) {
+      return null;
+    }
+
+    return (
+      options.find((option) => option?.kind === "allow_always") ??
+      options.find((option) => option?.kind === "allow_once") ??
+      options.find((option) => /allow|accept|approve|yes/i.test(String(option?.optionId ?? ""))) ??
+      null
+    );
+  }
+
+  handlePeerRequest(message) {
+    if (message.method === "session/request_permission") {
+      const selected = this.selectPermissionOption(message.params?.options);
+      const outcome = selected
+        ? { outcome: "selected", optionId: selected.optionId }
+        : { outcome: "cancelled" };
+      this.sendMessage({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { outcome }
+      });
+      return;
+    }
+
+    this.sendMessage({
+      jsonrpc: "2.0",
+      id: message.id,
+      error: {
+        code: -32601,
+        message: `Unsupported server request: ${message.method}`
+      }
+    });
   }
 
   handleLine(line) {
@@ -105,7 +158,15 @@ class AcpClientBase {
       return;
     }
 
-    // Response (has id).
+    // Server-to-client request (has both id and method). This is distinct from
+    // a response to one of our requests; write-capable runs use this path for
+    // permission prompts and will hang forever if it is dropped.
+    if (message.method && "id" in message && message.id !== null) {
+      this.handlePeerRequest(message);
+      return;
+    }
+
+    // Response (has id, no method).
     if ("id" in message && message.id !== null) {
       const pending = this.pending.get(message.id);
       if (pending) {
@@ -264,11 +325,13 @@ class SpawnedAcpClient extends AcpClientBase {
     this.proc = spawn(invocation.command, invocation.args, {
       cwd: this.cwd,
       env,
+      detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe"]
     });
     this.displayCommand = invocation.display;
 
     const rl = readline.createInterface({ input: this.proc.stdout });
+    this.stdoutReader = rl;
     rl.on("line", (line) => this.handleLine(line));
 
     this.proc.on("exit", (code) => {
@@ -321,14 +384,42 @@ class SpawnedAcpClient extends AcpClientBase {
     }
 
     const { timedOut } = await waitForExitOrTimeout(this.exitPromise, DIRECT_CLOSE_TIMEOUT_MS);
-    if (timedOut && this.onDiagnostic) {
+    if (timedOut) {
       try {
-        this.onDiagnostic({
-          source: "direct-close-timeout",
-          message: `Timed out waiting for ${this.displayCommand} to exit after close; continuing.`
-        });
+        this.stdoutReader?.close();
       } catch {
-        // Best-effort.
+        // Already closed.
+      }
+      try {
+        this.proc?.stdout?.destroy();
+      } catch {
+        // Already closed.
+      }
+      try {
+        this.proc?.stderr?.destroy();
+      } catch {
+        // Already closed.
+      }
+      try {
+        this.proc?.stdin?.destroy();
+      } catch {
+        // Already closed.
+      }
+      try {
+        this.proc?.unref();
+      } catch {
+        // Already exited.
+      }
+      this.handleExit(null);
+      if (this.onDiagnostic) {
+        try {
+          this.onDiagnostic({
+            source: "direct-close-timeout",
+            message: `Timed out waiting for ${this.displayCommand} to exit after close; continuing.`
+          });
+        } catch {
+          // Best-effort.
+        }
       }
     }
   }
@@ -422,19 +513,54 @@ class BrokerAcpClient extends AcpClientBase {
 // child process or bind a broker socket. Not part of the public API — anything
 // prefixed with `__` is test-only.
 
+/**
+ * A lightweight AcpClientBase subclass for unit tests. Inherits all dispatch
+ * methods (handleLine, handlePeerRequest, selectPermissionOption) so there is
+ * no need to manually shim them — new methods added to the class are
+ * automatically available.
+ */
+class TestAcpClient extends AcpClientBase {
+  constructor(clientState) {
+    super(clientState.cwd ?? "/tmp", {
+      onNotification: clientState.onNotification ?? null,
+      onDiagnostic: clientState.onDiagnostic ?? null
+    });
+    this.transport = clientState.transport ?? "direct";
+    if (clientState.pending) {
+      this.pending = clientState.pending;
+    }
+    if (clientState.approvalMode !== undefined) {
+      this.approvalMode = clientState.approvalMode;
+    }
+    if (typeof clientState.sendMessage === "function") {
+      this.sendMessage = clientState.sendMessage;
+    }
+  }
+
+  sendMessage(_message) {
+    // Default no-op; tests override via constructor state.
+  }
+}
+
 export const __testing = {
   waitForExitOrTimeout,
+  TestAcpClient,
 
   /**
-   * Invoke AcpClientBase.handleLine against a fake client object.
+   * Invoke AcpClientBase.handleLine against a fake client object using a
+   * proper TestAcpClient subclass instance. This avoids having to manually
+   * shim new methods each time the base class is extended.
    *
    * @param {{ transport: string, pending: Map<number, any>, nextId: number,
-   *           lineBuffer: string, onNotification?: Function,
+   *           lineBuffer: string, approvalMode?: string,
+   *           sendMessage?: Function,
+   *           onNotification?: Function,
    *           onDiagnostic?: Function }} client
    * @param {string} line
    */
   handleLineOn(client, line) {
-    return AcpClientBase.prototype.handleLine.call(client, line);
+    const instance = new TestAcpClient(client);
+    instance.handleLine(line);
   },
 
   /**
