@@ -80,7 +80,7 @@ let nextRpcId = 1;
 /** @type {Map<number, { clientSocket: net.Socket, clientId: number }>} */
 const pendingRequests = new Map();
 
-/** @type {Map<string, net.Socket>} */
+/** @type {Map<number | string, net.Socket>} */
 const pendingPeerRequests = new Map();
 
 /** @type {net.Socket | null} */
@@ -178,7 +178,7 @@ function handleAcpLine(line) {
   // use this path and require the active client to send a response back.
   if (message.method && "id" in message && message.id !== null) {
     if (activeClient && !activeClient.destroyed) {
-      pendingPeerRequests.set(String(message.id), activeClient);
+      pendingPeerRequests.set(message.id, activeClient);
       send(activeClient, message);
     } else {
       sendToAcp({
@@ -334,10 +334,9 @@ function handleClientMessage(socket, line) {
   // Handle client response to a child-to-client request such as
   // session/request_permission.
   if (!message.method && "id" in message && message.id !== null) {
-    const normalizedId = String(message.id);
-    const requestSocket = pendingPeerRequests.get(normalizedId);
+    const requestSocket = pendingPeerRequests.get(message.id);
     if (requestSocket === socket) {
-      pendingPeerRequests.delete(normalizedId);
+      pendingPeerRequests.delete(message.id);
       sendToAcp({
         jsonrpc: "2.0",
         id: message.id,
