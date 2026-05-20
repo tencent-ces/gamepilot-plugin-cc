@@ -43,6 +43,7 @@ import {
   SESSION_ID_ENV,
   updateJobPhase
 } from "./lib/tracked-jobs.mjs";
+import { recordForegroundReviewResult } from "./lib/foreground-results.mjs";
 import {
   buildSingleJobSnapshot,
   buildStatusSnapshot,
@@ -198,6 +199,20 @@ async function handleReview(argv) {
     sessionId: result.sessionId
   };
 
+  await recordForegroundReviewResult(workspaceRoot, {
+    kind: "review",
+    title: `review: ${target || "auto"} review`,
+    request: { target },
+    threadId: result.sessionId,
+    payload: {
+      rawOutput: result.text,
+      scope: result.scope,
+      summary: result.summary
+    },
+    rendered: result.text,
+    summary: result.summary ?? result.text.slice(0, 120).replace(/\n/g, " ").trim()
+  });
+
   outputCommandResult(payload, result.text, false);
 }
 
@@ -236,12 +251,25 @@ async function handleReviewCommand(argv, { reviewName }) {
     process.exit(1);
   }
 
-  if (result.parsed) {
-    const rendered = renderReviewResult(result.parsed);
-    outputCommandResult(result.parsed, rendered, options.json);
-  } else {
-    outputCommandResult({ raw: result.text }, result.text, options.json);
-  }
+  const rendered = result.parsed ? renderReviewResult(result.parsed) : result.text;
+  const payload = result.parsed ?? { raw: result.text };
+  await recordForegroundReviewResult(workspaceRoot, {
+    kind: "adversarial-review",
+    title: `adversarial-review: ${options.scope || "auto"} review`,
+    request: {
+      scope: options.scope,
+      base: options.base,
+      model: options.model,
+      focus,
+      thinking
+    },
+    threadId: result.sessionId,
+    payload: result.parsed ? { ...result.parsed, rawOutput: result.text } : { rawOutput: result.text },
+    rendered,
+    summary: result.parsed?.summary ?? result.text.slice(0, 120).replace(/\n/g, " ").trim()
+  });
+
+  outputCommandResult(payload, rendered, options.json);
 }
 
 // ─── Task ─────────────────────────────────────────────────────────────────────

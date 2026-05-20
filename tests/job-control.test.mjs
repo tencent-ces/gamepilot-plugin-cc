@@ -8,9 +8,11 @@ import {
   buildStatusSnapshot,
   defaultIsProcessAlive,
   POSSIBLY_STALLED_AFTER_MS,
-  QUIET_AFTER_MS
+  QUIET_AFTER_MS,
+  resolveResultJob
 } from "../plugins/gamepilot/scripts/lib/job-control.mjs";
 import { recordJobEvent } from "../plugins/gamepilot/scripts/lib/job-observability.mjs";
+import { recordForegroundReviewResult } from "../plugins/gamepilot/scripts/lib/foreground-results.mjs";
 import { createTrackedJob } from "../plugins/gamepilot/scripts/lib/tracked-jobs.mjs";
 import { readJobFile, resolveJobLogFile, writeJobFile } from "../plugins/gamepilot/scripts/lib/state.mjs";
 
@@ -255,4 +257,26 @@ test("defaultIsProcessAlive returns true when no pid is provided", () => {
   assert.equal(defaultIsProcessAlive(null), true);
   assert.equal(defaultIsProcessAlive(undefined), true);
   assert.equal(defaultIsProcessAlive(0), true);
+});
+
+test("resolveResultJob finds foreground review output recorded after completion", async () => {
+  const workspace = makeTempDir();
+  initGitRepo(workspace);
+
+  const job = await recordForegroundReviewResult(workspace, {
+    kind: "review",
+    title: "review: auto review",
+    request: { target: "" },
+    threadId: "sess-review-123",
+    payload: { rawOutput: "Summary: 0 findings", scope: "auto" },
+    rendered: "Summary: 0 findings\n",
+    summary: "Summary: 0 findings"
+  });
+
+  const resolved = resolveResultJob(workspace, null);
+
+  assert.equal(fs.realpathSync(resolved.workspaceRoot), fs.realpathSync(workspace));
+  assert.equal(resolved.job.id, job.id);
+  assert.equal(resolved.job.status, "completed");
+  assert.equal(readJobFile(workspace, job.id).rendered, "Summary: 0 findings\n");
 });
